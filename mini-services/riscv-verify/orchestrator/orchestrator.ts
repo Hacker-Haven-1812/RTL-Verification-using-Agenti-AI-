@@ -77,15 +77,20 @@ export class Orchestrator {
     this.aborted = false;
     this.emit({ type: 'session-started', sessionId: config.sessionId, config });
 
-    // Kick off formal verification in parallel (don't await — fire and forget)
-    this.runFormalPath(config).catch(e => {
-      this.emit({ type: 'error', message: e.message, where: 'formal-path' });
-    });
+    // ----------------------------------------------------------------
+    // IMPORTANT: Run the simulation loop and the formal path SERIALLY.
+    // Running them in parallel caused the LLM API to return HTTP 429
+    // (Too Many Requests) because two agents fire calls at the same time.
+    // The llmChat() helper in agents.ts now serializes all calls through
+    // a global mutex, but we still keep the paths sequential here so the
+    // dashboard activity feed is readable.
+    // ----------------------------------------------------------------
 
-    // Run the simulation loop sequentially (each iteration depends on the prior)
+    // Run the simulation loop first (each iteration depends on the prior)
     let lastProgram: string | undefined;
     let lastReport: CoverageReport | undefined;
     let lastAnalysis: any = undefined;
+    let simLoopEnded = false;
 
     for (let iter = 1; iter <= config.maxIterations; iter++) {
       if (this.aborted) break;
@@ -104,20 +109,41 @@ export class Orchestrator {
 
       this.emit({ type: 'sim-iteration-start', iteration: iter, targetScenarios });
 
-      // ---- Step 1: Case Generation Agent ----
-      this.emit({ type: 'agent-activity', agent: 'Case Generation', phase: 'thinking', message: `Generating test program for iteration ${iter}...` });
-      let genResult;
-      try {
-        genResult = await caseGenerationAgent({
-          iteration: iter,
-          targetScenarios,
-          missingScenarios,
-          previousProgram: lastProgram,
-          instructionMixHint: config.instructionMixHint,
-        });
-      } catch (e: any) {
-        this.emit({ type: 'error', message: `Case Generation Agent failed: ${e.message}`, where: `iter-${iter}-casegen` });
-        break;
+      // ---- Step 1: Case Generation Agent (with retry) ----
+      let genResult: any = null;
+      const MAX_CASEGEN_RETRIES = 3;
+      for (let attempt = 1; attempt <= MAX_CASEGEN_RETRIES && !this.aborted; attempt++) {
+        this.emit({ type: 'agent-activity', agent: 'Case Generation', phase: 'thinking', message: `Generating test program for iteration ${iter}${attempt > 1 ? ` (attempt ${attempt}/${MAX_CASEGEN_RETRIES})` : ''}...` });
+        try {
+          genResult = await caseGenerationAgent({
+            iteration: iter,
+            targetScenarios,
+            missingScenarios,
+            previousProgram: lastProgram,
+            instructionMixHint: config.instructionMixHint,
+          });
+          // Validate: non-empty program
+          if (!genResult.program || genResult.program.trim().length === 0) {
+            throw new Error('Case Generation Agent returned an empty program');
+          }
+          break; // success
+        } catch (e: any) {
+          const msg = e?.message ?? String(e);
+          this.emit({ type: 'agent-activity', agent: 'Case Generation', phase: 'done', message: `Attempt ${attempt} failed: ${msg.slice(0, 100)}` });
+          if (attempt < MAX_CASEGEN_RETRIES) {
+            // Brief delay before retry — the llmChat helper already does backoff for 429s
+            // but this also covers non-429 failures.
+            await new Promise(r => setTimeout(r, 1500 * attempt));
+          } else {
+            this.emit({ type: 'error', message: `Case Generation Agent failed after ${MAX_CASEGEN_RETRIES} attempts: ${msg}`, where: `iter-${iter}-casegen` });
+            // Don't break the whole session — try the next iteration if we have any budget left
+            genResult = null;
+          }
+        }
+      }
+      if (!genResult) {
+        // Skip this iteration but continue the loop
+        continue;
       }
       this.emit({ type: 'agent-activity', agent: 'Case Generation', phase: 'done', message: `Generated ${genResult.program.split('\n').length} lines of assembly`, detail: { targets: genResult.targets, rationale: genResult.rationale } });
 
@@ -189,6 +215,7 @@ export class Orchestrator {
       // ---- Step 6: Goal check ----
       if (report.overallCoverage >= config.coverageGoal) {
         this.emit({ type: 'sim-loop-end', reason: 'goal-met', finalCoverage: report.overallCoverage });
+        simLoopEnded = true;
         break;
       }
 
@@ -206,9 +233,23 @@ export class Orchestrator {
         this.emit({ type: 'agent-activity', agent: 'Missing Case Suggestion', phase: 'done', message: `Agent error: ${e.message}` });
       }
 
-      if (iter === config.maxIterations) {
+      if (iter === config.maxIterations && !simLoopEnded) {
         this.emit({ type: 'sim-loop-end', reason: 'max-iterations', finalCoverage: report.overallCoverage });
+        simLoopEnded = true;
       }
+    }
+
+    if (!simLoopEnded) {
+      // Loop exited early (e.g. all iterations failed). Emit a max-iterations end.
+      this.emit({ type: 'sim-loop-end', reason: 'max-iterations', finalCoverage: lastReport?.overallCoverage ?? 0 });
+    }
+
+    // ----------------------------------------------------------------
+    // Now run the formal verification path SERIALLY (after sim loop).
+    // This avoids hitting the LLM API with two concurrent agent calls.
+    // ----------------------------------------------------------------
+    if (!this.aborted && config.targetModules.length > 0) {
+      await this.runFormalPath(config);
     }
 
     this.emit({ type: 'session-ended', sessionId: config.sessionId, summary: { finalCoverage: lastReport?.overallCoverage ?? 0, iterations: config.maxIterations, lastAnalysis } });
@@ -225,13 +266,15 @@ export class Orchestrator {
       }
       this.emit({ type: 'formal-start', module: moduleName });
 
-      // P1: Property Generation Agent
+      // P1: Property Generation Agent (with internal retry via llmChat)
       this.emit({ type: 'agent-activity', agent: 'Property Generation', phase: 'thinking', message: `Generating formal properties for ${moduleName}...` });
       let propResult;
       try {
         propResult = await propertyGenerationAgent(mod);
       } catch (e: any) {
         this.emit({ type: 'agent-activity', agent: 'Property Generation', phase: 'done', message: `Agent error: ${e.message}` });
+        // Emit an empty formal-end so the dashboard knows this module is done
+        this.emit({ type: 'formal-end', module: moduleName, summary: { proof: 0, counterexample: 0, errors: 0 } });
         continue;
       }
       this.emit({ type: 'formal-properties-generated', module: moduleName, properties: propResult.properties });
@@ -250,7 +293,7 @@ export class Orchestrator {
             type: 'formal-check-result',
             module: moduleName,
             result: {
-              property: { name: p.name, target: moduleName, declaration: p.declaration, inputs: [], precondition: '', consequent: '' },
+              property: { name: p.name, target: moduleName, declaration: p.declaration, inputs: [], precondition: '', consequent: '', explanation: p.explanation },
               status: 'parse-error',
               trials: 0,
               error: e.message,

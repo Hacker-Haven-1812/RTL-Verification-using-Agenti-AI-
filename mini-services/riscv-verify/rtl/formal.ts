@@ -52,73 +52,192 @@ const ALU_CTRL_NAMES: Record<string, number> = {
   ALU_XOR: 0x5, ALU_SRL: 0x6, ALU_SRA: 0x7, ALU_OR: 0x8, ALU_AND: 0x9,
 };
 
-// Parse a property block of the form:
-//   PROPERTY <name>:
-//     TARGET <module-name>
-//     FOR ALL <input-decls>
-//     IMPLIES <pre> => <post>
-//        OR
-//     IMPLIES <post>           (precondition defaults to "true")
+// Parse a property block. Tolerant of many LLM output variations:
+//   - Arrows: =>, →, ⟹, ==>, ⇒
+//   - Word operators: AND, OR, NOT (converted to &&, ||, !)
+//   - Verilog syntax: $signed(), 4'b0000, 1'b1, ~, <<, >>, >>>
+//   - Markdown formatting: **bold**, `code`, ``` fences
+//   - Lowercase keywords: property, target, for all, implies
+//   - Missing precondition (defaults to "true")
 export function parseProperty(source: string): FormalProperty {
-  const cleaned = source
-    .replace(/\/\/[^\n]*/g, '')            // strip // comments
-    .replace(/\/\*[\s\S]*?\*\//g, '')      // strip /* */ comments
+  // 0. Strip markdown formatting that wraps the whole block
+  let cleaned = source
+    .replace(/```[a-z]*\n?/g, '')   // strip code fences
+    .replace(/```/g, '')
+    .replace(/^\s*\*+\s*/gm, '')     // strip bold markdown ** at line starts
+    .replace(/\*\*(\w+)\*\*/g, '$1') // strip inline **bold**
+    .replace(/`([^`]+)`/g, '$1')     // strip inline `code`
+    .replace(/\/\/[^\n]*/g, '')      // strip // comments
+    .replace(/\/\*[\s\S]*?\*\//g, '')// strip /* */ comments
     .trim();
 
-  // Substitute ALU_* mnemonics with their numeric values for easier eval
-  const substituted = cleaned.replace(/\b(ALU_ADD|ALU_SUB|ALU_SLL|ALU_SLT|ALU_SLTU|ALU_XOR|ALU_SRL|ALU_SRA|ALU_OR|ALU_AND)\b/g,
+  // 1. Substitute ALU_* mnemonics with their numeric values
+  cleaned = cleaned.replace(/\b(ALU_ADD|ALU_SUB|ALU_SLL|ALU_SLT|ALU_SLTU|ALU_XOR|ALU_SRL|ALU_SRA|ALU_OR|ALU_AND)\b/g,
     (m) => String(ALU_CTRL_NAMES[m]));
 
-  // Strip Verilog-only syntax that JS can't evaluate
-  const sanitized = substituted
-    .replace(/\$signed\(([^)]+)\)/g, '($1)')     // $signed(x) -> (x)
-    .replace(/\$unsigned\(([^)]+)\)/g, '($1)')
-    .replace(/\b\d+'b[01_]+\b/g, (m) => String(parseInt(m.replace(/'b/, '').replace(/_/g, ''), 2)))  // 4'b0000 -> 0
-    .replace(/\b\d+'h[0-9a-fA-F_]+\b/g, (m) => String(parseInt(m.replace(/.*'h/, '').replace(/_/g, ''), 16)))
-    .replace(/\b\d+'d[0-9_]+\b/g, (m) => String(parseInt(m.replace(/.*'d/, '').replace(/_/g, ''), 10)));
+  // 2. Normalize Unicode arrows and word operators to plain JS
+  cleaned = cleaned
+    .replace(/→/g, '=>')           // Unicode arrow
+    .replace(/⟹/g, '=>')          // long Unicode arrow
+    .replace(/⇒/g, '=>')           // double Unicode arrow
+    .replace(/==>/g, '=>')         // double ASCII arrow
+    .replace(/↦/g, '=>')           // mapsto
+    .replace(/−/g, '-')            // Unicode minus
+    .replace(/×/g, '*')            // Unicode times
+    .replace(/÷/g, '/')            // Unicode divide
+    .replace(/≠/g, '!=')           // Unicode not-equal
+    .replace(/≤/g, '<=')           // Unicode leq
+    .replace(/≥/g, '>=')           // Unicode geq
+    .replace(/∧/g, '&&')           // Unicode and
+    .replace(/∨/g, '||')           // Unicode or
+    .replace(/¬/g, '!');            // Unicode not
 
-  const nameMatch = sanitized.match(/^PROPERTY\s+(\w+)\s*:/i);
+  // 3. Convert word operators (only when they appear as standalone words,
+  //    not as part of an identifier like "ALU_AND")
+  cleaned = cleaned.replace(/\bAND\b/g, '&&');
+  cleaned = cleaned.replace(/\bOR\b/g, '||');
+  cleaned = cleaned.replace(/\bNOT\b/g, '!');
+  cleaned = cleaned.replace(/\bXOR\b/g, '^');
+
+  // 4. Strip Verilog-only system functions
+  cleaned = cleaned
+    .replace(/\$signed\(([^)]+)\)/g, '($1)')
+    .replace(/\$unsigned\(([^)]+)\)/g, '($1)')
+    .replace(/\$clog2\(([^)]+)\)/g, 'Math.log2($1)');
+
+  // 5. Convert Verilog-sized literals: 4'b0000 -> 0, 8'hFF -> 255, 32'd100 -> 100
+  cleaned = cleaned
+    .replace(/\b(\d+)'b([01_]+)\b/g, (_, sz, val) => String(parseInt(val.replace(/_/g, ''), 2)))
+    .replace(/\b(\d+)'h([0-9a-fA-F_]+)\b/g, (_, sz, val) => String(parseInt(val.replace(/_/g, ''), 16)))
+    .replace(/\b(\d+)'d([0-9_]+)\b/g, (_, sz, val) => String(parseInt(val.replace(/_/g, ''), 10)))
+    .replace(/\b(\d+)'o([0-7_]+)\b/g, (_, sz, val) => String(parseInt(val.replace(/_/g, ''), 8)));
+
+  // 5b. Convert Verilog bit-slicing: x[high:low] -> ((x >> low) & mask)
+  //     where mask = (1 << (high - low + 1)) - 1
+  //     Must run BEFORE the array-index conversion below.
+  cleaned = cleaned.replace(/(\w+)\s*\[\s*(\d+)\s*:\s*(\d+)\s*\]/g, (_, name, high, low) => {
+    const h = parseInt(high, 10);
+    const l = parseInt(low, 10);
+    if (h < l) return `(${name} >> ${h}) & ${((1 << (l - h + 1)) - 1)}`;
+    const mask = (h - l + 1) >= 32 ? 0xffffffff : ((1 << (h - l + 1)) - 1);
+    return `((${name} >> ${l}) & 0x${mask.toString(16)})`;
+  });
+
+  // 5c. Convert single-bit indexing: x[3] -> ((x >> 3) & 1)
+  //     (only when the bracket contains a single number, not already handled by [h:l])
+  cleaned = cleaned.replace(/(\w+)\s*\[\s*(\d+)\s*\]/g, (_, name, idx) => {
+    return `((${name} >> ${idx}) & 1)`;
+  });
+
+  // 5d. Replace references to internal module state that the LLM might use.
+  //     `regs[<expr>]` is the regfile's internal array — we can't access it
+  //     from a combinational property, so replace with 0 (the property will
+  //     then likely fail to prove, which is the correct outcome for a
+  //     sequential property tested combinationally).
+  //     Similarly for `prev_regs[...]`.
+  cleaned = cleaned.replace(/\b(?:regs|prev_regs)\s*\[[^\]]+\]/g, '0');
+
+  // 6. Header
+  const nameMatch = cleaned.match(/^PROPERTY\s+(\w+)\s*:/i);
   if (!nameMatch) throw new Error('Missing "PROPERTY <name>:" header');
   const name = nameMatch[1];
 
-  const targetMatch = sanitized.match(/TARGET\s+(\w+)/i);
+  const targetMatch = cleaned.match(/TARGET\s+(\w+)/i);
   const target = targetMatch ? targetMatch[1] : 'rv32i_alu';
 
-  const forallMatch = sanitized.match(/FOR\s+ALL\s+([\s\S]+?)\s+IMPLIES/i);
+  // 7. FOR ALL ... IMPLIES ...
+  const forallMatch = cleaned.match(/FOR\s+ALL\s+([\s\S]+?)\s+IMPLIES/i);
   if (!forallMatch) throw new Error('Missing "FOR ALL <inputs> IMPLIES ..." clause');
   const inputsRaw = forallMatch[1].trim();
 
   const inputs: { name: string; width: number }[] = [];
   for (const part of inputsRaw.split(',')) {
-    const m = part.trim().match(/^(\w+)\s*:\s*uint\s*(\d+)$/i);
-    if (!m) throw new Error(`Bad input declaration: '${part}'`);
-    inputs.push({ name: m[1], width: parseInt(m[2], 10) });
+    const p = part.trim();
+    if (!p) continue;
+    // Accept many type spellings:
+    //   name:uint32, name : uint32, name:uint<32>, name:bit<32>
+    //   name:bit            (width=1)
+    //   name:bool           (width=1)
+    //   name:reg[5]         (width=5)
+    //   name:uint32[32]     (array — accepted but treated as scalar, see below)
+    // Strip array suffix [N] — we accept the input but treat it as a scalar
+    // because the property checker tests combinational behavior. The regfile
+    // module maintains its own internal state across trials.
+    const pNoArray = p.replace(/\[\s*\d+\s*\]\s*$/, '');
+    let m = pNoArray.match(/^(\w+)\s*:\s*(?:uint|bit|reg|integer)?\s*<?(\d+)>?\s*$/i);
+    if (m) {
+      inputs.push({ name: m[1], width: parseInt(m[2], 10) });
+      continue;
+    }
+    // Try: name:bit or name:bool (width=1)
+    m = pNoArray.match(/^(\w+)\s*:\s*(?:bit|bool)\s*$/i);
+    if (m) {
+      inputs.push({ name: m[1], width: 1 });
+      continue;
+    }
+    // Try: name:reg[N] (Verilog style)
+    m = pNoArray.match(/^(\w+)\s*:\s*reg\s*\[\s*(\d+)\s*:\s*0\s*\]\s*$/i);
+    if (m) {
+      inputs.push({ name: m[1], width: parseInt(m[2], 10) + 1 });
+      continue;
+    }
+    throw new Error(`Bad input declaration: '${p}'`);
+  }
+  if (inputs.length === 0) throw new Error('No inputs declared in FOR ALL clause');
+
+  // 8. Find the IMPLIES clause body
+  const impliesIdx = cleaned.search(/\bIMPLIES\s+/i);
+  if (impliesIdx < 0) throw new Error('Missing "IMPLIES" clause');
+  const afterImplies = cleaned.slice(impliesIdx + 8).trim();
+
+  // 9. Find the first standalone "=>" — scan char by char to avoid matching
+  //    ">=" or "==" or "!="
+  let arrowIdx = -1;
+  let depth = 0;       // paren depth
+  let inString = false;
+  for (let i = 0; i < afterImplies.length - 1; i++) {
+    const c = afterImplies[i];
+    const next = afterImplies[i + 1];
+    if (c === '"' || c === "'") inString = !inString;
+    if (inString) continue;
+    if (c === '(') depth++;
+    else if (c === ')') depth--;
+    if (depth !== 0) continue;
+    // Look for "=>" that is NOT part of ">=", "<=", "==", "!="
+    if (c === '=' && next === '>') {
+      // Check it's not ">=" (i.e., previous char is not ">", "<", "=", "!")
+      const prev = i > 0 ? afterImplies[i - 1] : '';
+      if (prev === '>' || prev === '<' || prev === '=' || prev === '!') continue;
+      arrowIdx = i;
+      break;
+    }
   }
 
-  // Find the IMPLIES clause and split on the first standalone "=>" (not part of ">=" or "==")
-  const impliesIdx = sanitized.search(/\bIMPLIES\s+/i);
-  if (impliesIdx < 0) throw new Error('Missing "IMPLIES" clause');
-  const afterImplies = sanitized.slice(impliesIdx + 8).trim();
-
-  // Find first " => " (with whitespace) that is NOT part of ">=" or "==" or "<="
-  // We look for the pattern: not in [=<>!] followed by => followed by space
-  const arrowMatch = afterImplies.match(/^([\s\S]+?)\s+=>\s+([\s\S]+)$/);
   let precondition: string;
   let consequent: string;
-  if (arrowMatch) {
-    precondition = arrowMatch[1].trim();
-    consequent = arrowMatch[2].trim();
+  if (arrowIdx >= 0) {
+    precondition = afterImplies.slice(0, arrowIdx).trim();
+    consequent = afterImplies.slice(arrowIdx + 2).trim();
   } else {
     // No arrow found — treat the whole expression as the consequent with precondition = true
     precondition = 'true';
     consequent = afterImplies.trim();
   }
 
-  // Reject Verilog ternary syntax that uses ? : (we want plain JS)
-  // Already substituted above. Final cleanup: remove trailing/leading parens
-  // that could break the Function constructor.
-  precondition = precondition.replace(/;$/, '').trim();
-  consequent = consequent.replace(/;$/, '').trim();
+  // 10. Clean up: strip trailing semicolons, normalize whitespace
+  precondition = precondition
+    .replace(/;$/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  consequent = consequent
+    .replace(/;$/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // 11. Validate that precondition and consequent are non-empty
+  if (!consequent || consequent.length === 0) {
+    throw new Error('Empty consequent after parsing IMPLIES');
+  }
 
   return { name, target, declaration: source, inputs, precondition, consequent };
 }

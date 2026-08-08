@@ -39,6 +39,79 @@ async function getZai() {
   return _zai;
 }
 
+// ----------------- Retry + Rate-Limit Helpers -----------------
+//
+// The z-ai LLM endpoint enforces rate limits. When we fire many agent calls in
+// rapid succession (especially in parallel — Case Gen + Property Gen), we get
+// HTTP 429 "Too many requests". These helpers fix that:
+//
+//   - `llmChat()` wraps every LLM call with exponential backoff retry.
+//   - A global mutex serializes all LLM calls so we never fire two at once.
+//   - A minimum inter-call delay spaces out successive calls.
+
+const MIN_CALL_INTERVAL_MS = 2500;       // ≥2.5s between LLM calls (avoids 429)
+const MAX_RETRIES = 6;
+const BASE_BACKOFF_MS = 3000;             // start at 3s, double each retry
+const MAX_BACKOFF_MS = 60_000;            // cap at 60s
+
+let _lastCallTime = 0;
+let _llmMutex: Promise<any> = Promise.resolve();
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
+async function llmChat(messages: { role: string; content: string }[], opts: { temperature?: number; max_tokens?: number } = {}) {
+  // Serialize all LLM calls through a single mutex — prevents parallel 429s
+  let release: () => void;
+  const wait = new Promise<void>((resolve) => { release = resolve; });
+  const prev = _llmMutex;
+  _llmMutex = wait;
+  await prev;
+
+  try {
+    // Enforce minimum inter-call interval
+    const now = Date.now();
+    const elapsed = now - _lastCallTime;
+    if (elapsed < MIN_CALL_INTERVAL_MS) {
+      await sleep(MIN_CALL_INTERVAL_MS - elapsed);
+    }
+    _lastCallTime = Date.now();
+
+    const zai = await getZai();
+    let lastError: any = null;
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        const resp = await zai.chat.completions.create({
+          messages,
+          temperature: opts.temperature ?? 0.5,
+          max_tokens: opts.max_tokens ?? 1200,
+        });
+        return resp.choices[0]?.message?.content ?? '';
+      } catch (e: any) {
+        lastError = e;
+        const msg = (e?.message ?? '').toLowerCase();
+        const is429 = msg.includes('429') || msg.includes('too many requests') || msg.includes('rate');
+        const is5xx = msg.includes('500') || msg.includes('502') || msg.includes('503') || msg.includes('504') || msg.includes('server error');
+        if (is429 || is5xx) {
+          // Backoff: 3s, 6s, 12s, 24s, 48s, 60s (capped) + jitter
+          const backoff = Math.min(MAX_BACKOFF_MS, BASE_BACKOFF_MS * Math.pow(2, attempt)) + Math.random() * 1000;
+          console.error(`[agents] LLM call failed (attempt ${attempt + 1}/${MAX_RETRIES}): ${msg.slice(0, 100)} — retrying in ${(backoff / 1000).toFixed(1)}s`);
+          await sleep(backoff);
+          // Reset lastCallTime so the next attempt also respects the interval
+          _lastCallTime = Date.now();
+          continue;
+        }
+        // Non-retryable error — throw immediately
+        throw e;
+      }
+    }
+    throw lastError ?? new Error('LLM call exhausted retries');
+  } finally {
+    release!();
+  }
+}
+
 // ----------------- Agent 1: Case Generation -----------------
 export interface CaseGenRequest {
   targetScenarios?: string[];      // human-readable scenario names to hit
@@ -89,7 +162,6 @@ Respond in EXACTLY this format (no markdown fences, no extra prose):
 <comma-separated list of scenario names this program exercises>`;
 
 export async function caseGenerationAgent(req: CaseGenRequest): Promise<CaseGenResult> {
-  const zai = await getZai();
   const lines: string[] = [];
   lines.push(`ITERATION: ${req.iteration}`);
   if (req.targetScenarios && req.targetScenarios.length > 0) {
@@ -110,16 +182,13 @@ export async function caseGenerationAgent(req: CaseGenRequest): Promise<CaseGenR
     lines.push(`HINT: ${req.instructionMixHint}`);
   }
 
-  const resp = await zai.chat.completions.create({
-    messages: [
+  const text = await llmChat(
+    [
       { role: 'system', content: CASE_GEN_SYSTEM },
       { role: 'user', content: lines.join('\n') },
     ],
-    temperature: 0.7,
-    max_tokens: 1500,
-  });
-
-  const text = resp.choices[0]?.message?.content ?? '';
+    { temperature: 0.7, max_tokens: 1500 }
+  );
   return parseCaseGenResponse(text);
 }
 
@@ -176,7 +245,6 @@ Be specific. Reference actual numbers from the report. Prioritize recommendation
 by expected coverage impact.`;
 
 export async function coverageAnalysisAgent(report: CoverageReport): Promise<CoverageAnalysisResult> {
-  const zai = await getZai();
   const input = `COVERAGE REPORT
 ===============
 Overall coverage: ${(report.overallCoverage * 100).toFixed(1)}%
@@ -202,15 +270,13 @@ ${report.functionalCoverage.scenarios.map(s => `  [${s.hit ? 'X' : ' '}] ${s.nam
 Total cycles: ${report.totalCycles}
 Total instructions: ${report.totalInstructions}`;
 
-  const resp = await zai.chat.completions.create({
-    messages: [
+  const text = await llmChat(
+    [
       { role: 'system', content: COV_SYS },
       { role: 'user', content: input },
     ],
-    temperature: 0.3,
-    max_tokens: 800,
-  });
-  const text = resp.choices[0]?.message?.content ?? '';
+    { temperature: 0.3, max_tokens: 800 }
+  );
   return parseCoverageResponse(text);
 }
 
@@ -251,7 +317,6 @@ export async function missingCaseAgent(
   report: CoverageReport,
   previousProgram: string | undefined
 ): Promise<MissingCaseResult> {
-  const zai = await getZai();
   const input = `CURRENT COVERAGE GAPS:
 ${report.missingScenarios.slice(0, 20).map(s => '  - ' + s).join('\n')}
 
@@ -263,15 +328,13 @@ MISSING INSTRUCTIONS: ${report.instructionCoverage.missingMnemonicSet.join(', ')
 
 ${previousProgram ? `LAST TEST PROGRAM (avoid duplicating its scenarios):\n\`\`\`\n${previousProgram.slice(0, 1500)}\n\`\`\`` : 'No previous program.'}`;
 
-  const resp = await zai.chat.completions.create({
-    messages: [
+  const text = await llmChat(
+    [
       { role: 'system', content: MISS_SYS },
       { role: 'user', content: input },
     ],
-    temperature: 0.5,
-    max_tokens: 900,
-  });
-  const text = resp.choices[0]?.message?.content ?? '';
+    { temperature: 0.5, max_tokens: 900 }
+  );
   return parseMissingCaseResponse(text);
 }
 
@@ -296,7 +359,8 @@ const PROP_SYS = `You are the Property Generation Agent of an autonomous RISC-V 
 
 Your job: convert the given RTL module's specification into formal properties
 using the small DSL below. The properties will be checked by an automated
-property-based test harness.
+property-based test harness that tests COMBINATIONAL behavior only (one cycle
+at a time, no history).
 
 DSL SYNTAX (one property per block):
 PROPERTY <name>:
@@ -304,28 +368,53 @@ PROPERTY <name>:
   FOR ALL <input1>:uint<w1>, <input2>:uint<w2>, ...
   IMPLIES <precondition-expr> => <consequent-expr>
 
-RULES:
-- Identifiers in scope: input names + output names of the module.
-- Use C-like boolean operators: ==, !=, <, >, <=, >=, &&, ||, !, ^, &, |, +, -, *, /.
-- For the ALU module, you may use ALU_ADD, ALU_SUB, ALU_SLL, ALU_SLT, ALU_SLTU,
+CRITICAL RULES:
+- Identifiers in scope: ONLY input names + output names listed in the PORTS section.
+  Do NOT reference internal signals like "regs", "prev_regs", or any array.
+- ALL properties must be COMBINATIONAL — the consequent must depend ONLY on the
+  current-cycle inputs, NOT on any previous state or history.
+- Use ONLY these JS-compatible operators: ==, !=, <, >, <=, >=, &&, ||, !, ^, &, |, +, -, *, /, <<, >>, >>>.
+- Do NOT use Verilog-specific syntax: NO $signed(), NO bit-slicing like x[4:0],
+  NO array indexing like regs[addr], NO ternary ? : (use && / || instead).
+- For type declarations, use ONLY: uint<N> (e.g. uint32, uint4, uint5, uint1).
+  Do NOT use "bit", "bool", "reg", "integer", or array types like uint32[32].
+- For the ALU module, use ALU_ADD, ALU_SUB, ALU_SLL, ALU_SLT, ALU_SLTU,
   ALU_XOR, ALU_SRL, ALU_SRA, ALU_OR, ALU_AND as alu_ctrl constants.
+- For 32-bit masks, use 0xffffffff (lowercase hex).
 - Properties should be SOUND: the consequent must hold whenever the precondition
   holds. The checker will look for counterexamples.
-- Generate 3 to 6 properties covering different aspects (commutativity, identity,
-  zero-flag correctness, signedness, overflow behavior, etc.).
+- Generate 3 to 5 properties. Each must be a SIMPLE combinatorial invariant.
 - Do NOT use markdown. Output each property block separated by a blank line.
 - After each property block, add an EXPLANATION line:
   EXPLANATION: <one-sentence justification>
 
-Example:
-PROPERTY add_commutative:
+GOOD examples (combinational, parseable):
+PROPERTY add_result:
   TARGET rv32i_alu
   FOR ALL operand_a:uint32, operand_b:uint32, alu_ctrl:uint4
   IMPLIES alu_ctrl == ALU_ADD => alu_result == ((operand_a + operand_b) & 0xffffffff)
-EXPLANATION: ALU in ADD mode must produce the sum of the two operands.`;
+EXPLANATION: ALU in ADD mode must produce the sum of the two operands.
+
+PROPERTY sub_self_zero:
+  TARGET rv32i_alu
+  FOR ALL operand_a:uint32, alu_ctrl:uint4
+  IMPLIES alu_ctrl == ALU_SUB => alu_result == 0
+EXPLANATION: SUB with identical operands must produce zero.
+
+PROPERTY read_zero_reg:
+  TARGET rv32i_regfile
+  FOR ALL raddr1:uint5, raddr2:uint5, we:uint1, waddr:uint5, wdata:uint32
+  IMPLIES raddr1 == 0 => rdata1 == 0
+EXPLANATION: Reading register x0 must always return zero.
+
+BAD examples (do NOT generate these — they will fail to parse):
+- "we:bit" (use "we:uint1" instead)
+- "prev_regs:uint32[32]" (arrays not allowed)
+- "regs[raddr1]" (internal state not accessible)
+- "operand_b[4:0]" (use "(operand_b & 0x1f)" instead)
+- "$signed(operand_a)" (use "operand_a" directly)`;
 
 export async function propertyGenerationAgent(module: RtlModule): Promise<PropertyGenResult> {
-  const zai = await getZai();
   const input = `RTL MODULE: ${module.name}
 DESCRIPTION: ${module.description}
 
@@ -340,15 +429,13 @@ ${module.verilogSource}
 Generate 3-6 formal properties for this module using the DSL described above.
 The properties must be checkable against the behavioral model.`;
 
-  const resp = await zai.chat.completions.create({
-    messages: [
+  const text = await llmChat(
+    [
       { role: 'system', content: PROP_SYS },
       { role: 'user', content: input },
     ],
-    temperature: 0.4,
-    max_tokens: 1800,
-  });
-  const text = resp.choices[0]?.message?.content ?? '';
+    { temperature: 0.4, max_tokens: 1800 }
+  );
   return parsePropertyResponse(text);
 }
 

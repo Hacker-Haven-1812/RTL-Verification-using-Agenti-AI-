@@ -170,4 +170,6 @@ export interface VerificationState {
   }>;
   simLoopEndReason: 'goal-met' | 'max-iterations' | null;
   errors: { message: string; where: string; timestamp: number }[];
+  sessionStartTime: number | null;
+  sessionEndTime: number | null;
 }

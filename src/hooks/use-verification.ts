@@ -24,6 +24,8 @@ const INITIAL_STATE: VerificationState = {
   formalResults: {},
   simLoopEndReason: null,
   errors: [],
+  sessionStartTime: null,
+  sessionEndTime: null,
 };
 
 type Action =
@@ -47,6 +49,8 @@ function reducer(state: VerificationState, action: Action): VerificationState {
         sessionId: action.sessionId,
         config: action.config,
         totalIterations: action.config.maxIterations,
+        sessionStartTime: Date.now(),
+        sessionEndTime: null,
       };
     case 'SOCKET_DISCONNECTED':
       if (state.status === 'running') {
@@ -112,7 +116,8 @@ function reducer(state: VerificationState, action: Action): VerificationState {
         case 'missing-case-suggestions':
           return { ...state, missingCaseSuggestions: e.suggestions };
         case 'sim-loop-end':
-          return { ...state, simLoopEndReason: e.reason, status: 'completed' };
+          // Don't mark as completed yet — wait for session-ended so formal path can finish
+          return { ...state, simLoopEndReason: e.reason };
         case 'formal-start':
           return {
             ...state,
@@ -152,7 +157,7 @@ function reducer(state: VerificationState, action: Action): VerificationState {
           };
         }
         case 'session-ended':
-          return { ...state, status: 'completed' };
+          return { ...state, status: 'completed', sessionEndTime: Date.now() };
         case 'error':
           return { ...state, errors: [...state.errors, { message: e.message, where: e.where, timestamp: Date.now() }] };
         default:
@@ -223,6 +228,39 @@ export function useVerification(opts: UseVerificationOptions = {}) {
     socketRef.current?.emit('start-verification', fullConfig);
   }, []);
 
+  // NEW: Run a user-submitted custom RISC-V assembly program (no AI in the loop)
+  const runCustomProgram = useCallback((program: string, maxCycles?: number) => {
+    const sessionId = `custom-${Date.now()}`;
+    dispatch({ type: 'RESET' });
+    // Use a minimal config so the dashboard shows "running"
+    const config: OrchestratorConfig = {
+      sessionId,
+      coverageGoal: 1.0,           // not used for custom runs
+      maxIterations: 1,
+      maxCyclesPerRun: maxCycles ?? 1500,
+      targetModules: [],
+      initialScenarios: [],
+    };
+    dispatch({ type: 'SESSION_STARTED', sessionId, config });
+    socketRef.current?.emit('run-custom-program', { sessionId, program, maxCycles: maxCycles ?? 1500 });
+  }, []);
+
+  // NEW: Check a user-submitted custom formal property (no AI in the loop)
+  const checkCustomProperty = useCallback((moduleName: string, declaration: string) => {
+    const sessionId = `custom-prop-${Date.now()}`;
+    dispatch({ type: 'RESET' });
+    const config: OrchestratorConfig = {
+      sessionId,
+      coverageGoal: 1.0,
+      maxIterations: 1,
+      maxCyclesPerRun: 0,
+      targetModules: [moduleName],
+      initialScenarios: [],
+    };
+    dispatch({ type: 'SESSION_STARTED', sessionId, config });
+    socketRef.current?.emit('check-custom-property', { sessionId, moduleName, declaration });
+  }, []);
+
   const abort = useCallback(() => {
     socketRef.current?.emit('abort-verification');
   }, []);
@@ -231,5 +269,5 @@ export function useVerification(opts: UseVerificationOptions = {}) {
     dispatch({ type: 'RESET' });
   }, []);
 
-  return { state, start, abort, reset, socket: socketRef };
+  return { state, start, runCustomProgram, checkCustomProperty, abort, reset, socket: socketRef };
 }

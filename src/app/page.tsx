@@ -14,13 +14,15 @@ import { FormalVerificationPanel } from '@/components/dashboard/formal-verificat
 import { MissingCasePanel } from '@/components/dashboard/missing-case-panel';
 import { CoverageAnalysisPanel } from '@/components/dashboard/coverage-analysis-panel';
 import { RtlModuleViewer } from '@/components/dashboard/rtl-module-viewer';
+import { CustomInputPanel } from '@/components/dashboard/custom-input-panel';
+import { StatusFooter } from '@/components/dashboard/status-footer';
 import { Card, CardContent } from '@/components/ui/card';
 import { AlertCircle } from 'lucide-react';
 
 const AVAILABLE_MODULES = ['rv32i_alu', 'rv32i_regfile'];
 
 export default function HomePage() {
-  const { state, start, abort, reset } = useVerification();
+  const { state, start, runCustomProgram, checkCustomProperty, abort, reset } = useVerification();
   const [wsConnected, setWsConnected] = useState(false);
 
   // Track WebSocket connection state by polling the socket
@@ -41,13 +43,14 @@ export default function HomePage() {
     if (last.agent === 'Coverage Analysis') return 'coverage';
     if (last.agent === 'Missing Case Suggestion') return 'missing-case';
     if (last.agent === 'Property Generation') return 'formal';
+    if (last.agent === 'Formal Checker') return 'formal';
     if (last.agent === 'Assembler') return 'sim';
     return 'idle';
   }, [state.agentActivities, state.status]);
 
   // Detect if formal path is active
   const formalActive = useMemo(() => {
-    const formalAgents = state.agentActivities.filter(a => a.agent === 'Property Generation');
+    const formalAgents = state.agentActivities.filter(a => a.agent === 'Property Generation' || a.agent === 'Formal Checker');
     if (formalAgents.length === 0) return false;
     const last = formalAgents[formalAgents.length - 1];
     return last.phase === 'thinking';
@@ -111,6 +114,11 @@ export default function HomePage() {
               onReset={reset}
               availableModules={AVAILABLE_MODULES}
             />
+            <CustomInputPanel
+              isRunning={state.status === 'running'}
+              onRunProgram={runCustomProgram}
+              onCheckProperty={checkCustomProperty}
+            />
             <RtlModuleViewer activeModules={state.config?.targetModules ?? []} />
             <MissingCasePanel suggestions={state.missingCaseSuggestions} />
           </div>
@@ -140,8 +148,8 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Footer */}
-        <footer className="mt-auto pt-4 pb-3 border-t border-border/40">
+        {/* Footer with attribution */}
+        <footer className="pt-4 pb-3 border-t border-border/40">
           <div className="flex items-center justify-between gap-2 flex-wrap text-[10px] text-muted-foreground">
             <div className="flex items-center gap-3 flex-wrap">
               <span className="font-mono">VLSID 2026 · 39th Intl. Conf. on VLSI Design</span>
@@ -154,6 +162,9 @@ export default function HomePage() {
           </div>
         </footer>
       </div>
+
+      {/* Sticky bottom status indicator + session summary */}
+      <StatusFooter state={state} onReset={reset} />
     </main>
   );
 }

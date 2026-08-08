@@ -1,6 +1,11 @@
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import { Orchestrator, OrchestratorConfig, OrchestratorEvent, TARGETABLE_MODULES } from './orchestrator/orchestrator.js';
+import { assemble } from './rv32i/assembler.js';
+import { RV32ICore, MEM_SIZE } from './rv32i/core.js';
+import { analyzeCoverage } from './rv32i/coverage.js';
+import { parseProperty, checkProperty } from './rtl/formal.js';
+import { getRtlModule } from './rtl/modules.js';
 
 const httpServer = createServer();
 const io = new Server(httpServer, {
@@ -54,6 +59,124 @@ io.on('connection', (socket) => {
       orch.abort();
       console.log(`[verify-service] aborted session for ${socket.id}`);
     }
+  });
+
+  // ----------------------------------------------------------------
+  // NEW: Run a user-submitted custom RISC-V assembly program.
+  // Bypasses the AI agents entirely — the user writes the program,
+  // we assemble + simulate + analyze coverage, all deterministically.
+  // ----------------------------------------------------------------
+  socket.on('run-custom-program', (payload: { sessionId: string; program: string; maxCycles?: number }) => {
+    const sessionId = payload.sessionId ?? `custom-${Date.now()}`;
+    console.log(`[verify-service] run-custom-program sessionId=${sessionId} bytes=${payload.program?.length ?? 0}`);
+    const emit = (e: any) => socket.emit('orchestrator-event', { ...e, sessionId });
+
+    try {
+      // Step 1: Assemble
+      emit({ type: 'agent-activity', agent: 'Assembler', phase: 'thinking', message: 'Assembling user-submitted program...' });
+      const asm = assemble(payload.program || '');
+      emit({ type: 'agent-activity', agent: 'Assembler', phase: 'done', message: `Assembled ${asm.instructionCount} instructions${asm.errors.length > 0 ? ` with ${asm.errors.length} errors` : ''}` });
+
+      emit({
+        type: 'program-generated',
+        iteration: 1,
+        program: payload.program || '',
+        rationale: 'User-submitted custom program (no AI in the loop)',
+        targets: [],
+        assemblerErrors: asm.errors,
+        instructionCount: asm.instructionCount,
+      });
+
+      if (asm.errors.length > 0 || asm.bytes.length === 0) {
+        emit({ type: 'error', message: `Assembly failed: ${asm.errors.length} errors`, where: 'custom-program-assemble' });
+        emit({ type: 'sim-loop-end', reason: 'max-iterations', finalCoverage: 0 });
+        emit({ type: 'session-ended', sessionId, summary: { finalCoverage: 0, iterations: 0, lastAnalysis: null, source: 'custom-program' } });
+        return;
+      }
+
+      // Step 2: Simulate
+      emit({ type: 'sim-iteration-start', iteration: 1, targetScenarios: ['USER_PROVIDED'] });
+      const mem = new Uint8Array(MEM_SIZE);
+      mem.set(asm.bytes, 0);
+      const maxCycles = payload.maxCycles ?? 1500;
+      const core = new RV32ICore(mem, { maxCycles, startPc: 0, trackHazards: true });
+      const result = core.run(maxCycles);
+
+      // Stream first 200 trace entries
+      const STREAM_FIRST_N = 200;
+      let lastStreamTime = 0;
+      for (const e of result.trace.slice(0, STREAM_FIRST_N)) {
+        const now = Date.now();
+        if (now - lastStreamTime > 5) {
+          emit({ type: 'simulation-progress', iteration: 1, cycle: e.cycle, pc: e.pc, mnemonic: e.mnemonic, entry: e });
+          lastStreamTime = now;
+        }
+      }
+      emit({ type: 'simulation-complete', iteration: 1, result });
+
+      // Step 3: Coverage Analysis
+      const report = analyzeCoverage(result.trace, result.cycles);
+      emit({ type: 'coverage-update', iteration: 1, report });
+
+      emit({ type: 'sim-loop-end', reason: 'goal-met', finalCoverage: report.overallCoverage });
+      emit({ type: 'session-ended', sessionId, summary: { finalCoverage: report.overallCoverage, iterations: 1, lastAnalysis: null, source: 'custom-program' } });
+    } catch (e: any) {
+      console.error(`[verify-service] run-custom-program error:`, e);
+      emit({ type: 'error', message: e.message, where: 'custom-program' });
+      emit({ type: 'session-ended', sessionId, summary: { finalCoverage: 0, iterations: 0, lastAnalysis: null, source: 'custom-program', error: e.message } });
+    }
+  });
+
+  // ----------------------------------------------------------------
+  // NEW: Check a user-submitted custom formal property.
+  // The user writes a property in our DSL, we parse + check it.
+  // ----------------------------------------------------------------
+  socket.on('check-custom-property', (payload: { sessionId: string; moduleName: string; declaration: string }) => {
+    const sessionId = payload.sessionId ?? `custom-prop-${Date.now()}`;
+    console.log(`[verify-service] check-custom-property sessionId=${sessionId} module=${payload.moduleName}`);
+    const emit = (e: any) => socket.emit('orchestrator-event', { ...e, sessionId });
+
+    const mod = getRtlModule(payload.moduleName);
+    if (!mod) {
+      emit({ type: 'error', message: `Unknown module: ${payload.moduleName}`, where: 'custom-property' });
+      emit({ type: 'session-ended', sessionId, summary: { source: 'custom-property', error: 'unknown module' } });
+      return;
+    }
+
+    emit({ type: 'formal-start', module: payload.moduleName });
+    emit({ type: 'agent-activity', agent: 'Formal Checker', phase: 'thinking', message: `Parsing user-submitted property...` });
+
+    let parsed;
+    try {
+      parsed = parseProperty(payload.declaration || '');
+    } catch (e: any) {
+      emit({
+        type: 'formal-check-result',
+        module: payload.moduleName,
+        result: {
+          property: { name: 'user_property', target: payload.moduleName, declaration: payload.declaration, inputs: [], precondition: '', consequent: '' },
+          status: 'parse-error',
+          trials: 0,
+          error: e.message,
+          durationMs: 0,
+        },
+      });
+      emit({ type: 'formal-end', module: payload.moduleName, summary: { proof: 0, counterexample: 0, errors: 1 } });
+      emit({ type: 'agent-activity', agent: 'Formal Checker', phase: 'done', message: `Parse error: ${e.message}` });
+      emit({ type: 'session-ended', sessionId, summary: { source: 'custom-property', error: e.message } });
+      return;
+    }
+
+    emit({ type: 'agent-activity', agent: 'Formal Checker', phase: 'done', message: `Parsed property "${parsed.name}" — running 2000 random trials...` });
+
+    const result = checkProperty(parsed, mod, 2000);
+    emit({ type: 'formal-check-result', module: payload.moduleName, result });
+
+    const proof = result.status === 'proof' ? 1 : 0;
+    const cex = result.status === 'counterexample' ? 1 : 0;
+    const errors = (result.status === 'parse-error' || result.status === 'runtime-error') ? 1 : 0;
+    emit({ type: 'formal-end', module: payload.moduleName, summary: { proof, counterexample: cex, errors } });
+    emit({ type: 'session-ended', sessionId, summary: { source: 'custom-property', status: result.status } });
   });
 
   socket.on('disconnect', () => {

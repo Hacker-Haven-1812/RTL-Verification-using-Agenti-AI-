@@ -172,4 +172,10 @@ export interface VerificationState {
   errors: { message: string; where: string; timestamp: number }[];
   sessionStartTime: number | null;
   sessionEndTime: number | null;
+  // Cumulative coverage across ALL iterations (union of hit instructions,
+  // max branch/register/hazard/functional coverage). This is what the user
+  // actually cares about — "how much of the design have we tested so far?"
+  cumulativeCoverage: number;
+  cumulativeHitInstructions: string[];
+  cumulativeInstructionCount: number;
 }

@@ -119,6 +119,10 @@ export interface CaseGenRequest {
   previousProgram?: string;        // last program we tried
   iteration: number;
   instructionMixHint?: string;     // free-form hint
+  // NEW: cumulative coverage tracking across ALL iterations
+  alreadyHitInstructions?: string[];   // mnemonics exercised in prior iterations
+  missingInstructions?: string[];      // mnemonics NOT yet exercised
+  coverageHistory?: { iteration: number; overall: number }[];  // coverage trend
 }
 
 export interface CaseGenResult {
@@ -127,58 +131,91 @@ export interface CaseGenResult {
   targetScenarios: string[];
 }
 
-const CASE_GEN_SYSTEM = `You are the Case Generation Agent of an autonomous RISC-V RTL verification framework.
+const CASE_GEN_SYSTEM = `You are the Test Generator of an autonomous RISC-V RTL verification framework.
 
-Your job: write a small, self-contained RISC-V RV32I assembly test program that exercises the specific scenarios requested.
+Your job: write a small, self-contained RISC-V RV32I assembly test program that MAXIMIZES COVERAGE by exercising instructions that have NOT been tested yet.
 
-STRICT REQUIREMENTS:
-1. Use ONLY the RV32I base integer instruction set. No M/F/D/A extensions.
-   Allowed mnemonics:
-     LUI AUIPC JAL JALR
-     BEQ BNE BLT BGE BLTU BGEU
-     LB LH LW LBU LHU SB SH SW
-     ADDI SLTI SLTIU XORI ORI ANDI SLLI SRLI SRAI
-     ADD SUB SLL SLT SLTU XOR SRL SRA OR AND
-     ECALL EBREAK
-   Pseudo-instructions allowed: li, mv, nop, j, jr, ret, beqz, bnez, bltz, bgez,
-   neg, not, seqz, snez, b
-2. The program MUST terminate with an EBREAK instruction.
-3. Keep it under 60 instructions. Programs are loaded at address 0; PC starts at 0.
+CRITICAL COVERAGE RULES:
+1. You will receive a list of ALREADY-HIT instructions and MISSING instructions.
+2. Your program MUST use at least 6 instructions from the MISSING list.
+3. Do NOT repeat instructions that are already in the ALREADY-HIT list unless needed for control flow.
+4. Each program should target a DIFFERENT subset of the missing instructions — diversity is the goal.
+5. If this is iteration 1 (no missing list yet), write a broad program covering as many instruction types as possible.
+
+ALLOWED INSTRUCTIONS (RV32I base ISA only — no M/F/D/A extensions):
+  LUI AUIPC JAL JALR
+  BEQ BNE BLT BGE BLTU BGEU
+  LB LH LW LBU LHU SB SH SW
+  ADDI SLTI SLTIU XORI ORI ANDI SLLI SRLI SRAI
+  ADD SUB SLL SLT SLTU XOR SRL SRA OR AND
+  ECALL EBREAK
+  Pseudo: li, mv, nop, j, jr, ret, beqz, bnez, bltz, bgez, neg, not, seqz, snez, b
+
+PROGRAM RULES:
+1. The program MUST terminate with an EBREAK instruction.
+2. Keep it under 50 instructions — dense and targeted, not sprawling.
+3. Programs are loaded at address 0; PC starts at 0.
 4. Use labels for branches and jumps (the assembler resolves them).
 5. Comments start with #.
-6. Registers x0..x31 are available. x0 is hardwired to 0. Use the stack (sp=x2)
-   only if needed — there is no ABI setup, all registers start at 0.
-7. Memory below 0x1000 is reserved for the program; use addresses >= 0x1000 for
-   loads/stores.
-8. Target the SPECIFIC scenarios listed in the request — do not just write a
-   generic test. Each instruction should serve a coverage purpose.
+6. Registers x0..x31 are available. x0 is hardwired to 0. All registers start at 0.
+7. Memory below 0x1000 is reserved for the program; use addresses >= 0x1000 for loads/stores.
+8. Make branches resolve BOTH ways: include cases where the branch is taken AND not taken.
+9. For load/store tests: store a value first, then load it back with different sizes (LW, LH, LB, LBU, LHU).
 
 Respond in EXACTLY this format (no markdown fences, no extra prose):
 ---PROGRAM---
 <assembly code>
 ---RATIONALE---
-<2-3 sentences explaining what scenarios this program targets and why>
+<2-3 sentences: which MISSING instructions does this program exercise?>
 ---TARGETS---
-<comma-separated list of scenario names this program exercises>`;
+<comma-separated list of instruction mnemonics this program targets>`;
 
 export async function caseGenerationAgent(req: CaseGenRequest): Promise<CaseGenResult> {
   const lines: string[] = [];
   lines.push(`ITERATION: ${req.iteration}`);
+
+  // Coverage trend
+  if (req.coverageHistory && req.coverageHistory.length > 0) {
+    lines.push(`COVERAGE TREND across previous iterations:`);
+    for (const h of req.coverageHistory) {
+      lines.push(`  iter ${h.iteration}: ${(h.overall * 100).toFixed(1)}%`);
+    }
+  }
+
+  // CRITICAL: Show the agent exactly what's been hit and what's missing
+  if (req.alreadyHitInstructions && req.alreadyHitInstructions.length > 0) {
+    lines.push(``);
+    lines.push(`ALREADY EXERCISED (${req.alreadyHitInstructions.length} instructions — DO NOT repeat these unless needed for control flow):`);
+    lines.push(`  ${req.alreadyHitInstructions.join(', ')}`);
+  }
+  if (req.missingInstructions && req.missingInstructions.length > 0) {
+    lines.push(``);
+    lines.push(`MISSING INSTRUCTIONS (${req.missingInstructions.length} not yet exercised — YOUR PROGRAM MUST USE AT LEAST 6 OF THESE):`);
+    lines.push(`  ${req.missingInstructions.join(', ')}`);
+  } else if (req.iteration === 1) {
+    lines.push(``);
+    lines.push(`This is iteration 1. Write a broad program covering as many instruction types as possible.`);
+  }
+
   if (req.targetScenarios && req.targetScenarios.length > 0) {
-    lines.push(`TARGET SCENARIOS (must exercise these):`);
+    lines.push(``);
+    lines.push(`TARGET SCENARIOS (also exercise these):`);
     for (const s of req.targetScenarios) lines.push(`  - ${s}`);
   }
   if (req.missingScenarios && req.missingScenarios.length > 0) {
-    lines.push(`COVERAGE GAPS TO CLOSE (from previous iteration):`);
-    for (const s of req.missingScenarios.slice(0, 15)) lines.push(`  - ${s}`);
+    lines.push(``);
+    lines.push(`FUNCTIONAL GAPS TO CLOSE:`);
+    for (const s of req.missingScenarios.slice(0, 10)) lines.push(`  - ${s}`);
   }
   if (req.previousProgram) {
-    lines.push(`PREVIOUS PROGRAM (avoid simply duplicating — extend or complement it):`);
+    lines.push(``);
+    lines.push(`PREVIOUS PROGRAM (for reference — write a DIFFERENT program, not a variation):`);
     lines.push('```');
-    lines.push(req.previousProgram.slice(0, 3000));
+    lines.push(req.previousProgram.slice(0, 2000));
     lines.push('```');
   }
   if (req.instructionMixHint) {
+    lines.push(``);
     lines.push(`HINT: ${req.instructionMixHint}`);
   }
 
@@ -187,7 +224,7 @@ export async function caseGenerationAgent(req: CaseGenRequest): Promise<CaseGenR
       { role: 'system', content: CASE_GEN_SYSTEM },
       { role: 'user', content: lines.join('\n') },
     ],
-    { temperature: 0.7, max_tokens: 1500 }
+    { temperature: 0.8, max_tokens: 1500 }
   );
   return parseCaseGenResponse(text);
 }

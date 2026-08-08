@@ -92,6 +92,14 @@ export class Orchestrator {
     let lastAnalysis: any = undefined;
     let simLoopEnded = false;
 
+    // Track CUMULATIVE coverage across all iterations — this is the key fix.
+    // Without this, the Test Generator only sees the last program and tends to
+    // regenerate similar code, so coverage stalls. With cumulative tracking,
+    // each iteration knows exactly which instructions have already been hit
+    // and which are still missing, so it can target the gaps.
+    const cumulativeHitInstructions = new Set<string>();
+    const coverageHistory: { iteration: number; overall: number }[] = [];
+
     for (let iter = 1; iter <= config.maxIterations; iter++) {
       if (this.aborted) break;
 
@@ -109,7 +117,20 @@ export class Orchestrator {
 
       this.emit({ type: 'sim-iteration-start', iteration: iter, targetScenarios });
 
-      // ---- Step 1: Case Generation Agent (with retry) ----
+      // ---- Step 1: Test Generator (with retry) ----
+      // Pass cumulative hit/missing instruction lists so the agent targets gaps.
+      const alreadyHit = [...cumulativeHitInstructions].sort();
+      const allInstructions = [
+        'LUI', 'AUIPC', 'JAL', 'JALR',
+        'BEQ', 'BNE', 'BLT', 'BGE', 'BLTU', 'BGEU',
+        'LB', 'LH', 'LW', 'LBU', 'LHU',
+        'SB', 'SH', 'SW',
+        'ADDI', 'SLTI', 'SLTIU', 'XORI', 'ORI', 'ANDI', 'SLLI', 'SRLI', 'SRAI',
+        'ADD', 'SUB', 'SLL', 'SLT', 'SLTU', 'XOR', 'SRL', 'SRA', 'OR', 'AND',
+        'ECALL', 'EBREAK',
+      ];
+      const missingInstructions = allInstructions.filter(m => !cumulativeHitInstructions.has(m));
+
       let genResult: any = null;
       const MAX_CASEGEN_RETRIES = 3;
       for (let attempt = 1; attempt <= MAX_CASEGEN_RETRIES && !this.aborted; attempt++) {
@@ -121,28 +142,27 @@ export class Orchestrator {
             missingScenarios,
             previousProgram: lastProgram,
             instructionMixHint: config.instructionMixHint,
+            alreadyHitInstructions: alreadyHit,
+            missingInstructions,
+            coverageHistory,
           });
           // Validate: non-empty program
           if (!genResult.program || genResult.program.trim().length === 0) {
-            throw new Error('Case Generation Agent returned an empty program');
+            throw new Error('Test Generator returned an empty program');
           }
           break; // success
         } catch (e: any) {
           const msg = e?.message ?? String(e);
           this.emit({ type: 'agent-activity', agent: 'Test Generator', phase: 'done', message: `Attempt ${attempt} failed: ${msg.slice(0, 100)}` });
           if (attempt < MAX_CASEGEN_RETRIES) {
-            // Brief delay before retry — the llmChat helper already does backoff for 429s
-            // but this also covers non-429 failures.
             await new Promise(r => setTimeout(r, 1500 * attempt));
           } else {
-            this.emit({ type: 'error', message: `Case Generation Agent failed after ${MAX_CASEGEN_RETRIES} attempts: ${msg}`, where: `iter-${iter}-casegen` });
-            // Don't break the whole session — try the next iteration if we have any budget left
+            this.emit({ type: 'error', message: `Test Generator failed after ${MAX_CASEGEN_RETRIES} attempts: ${msg}`, where: `iter-${iter}-casegen` });
             genResult = null;
           }
         }
       }
       if (!genResult) {
-        // Skip this iteration but continue the loop
         continue;
       }
       this.emit({ type: 'agent-activity', agent: 'Test Generator', phase: 'done', message: `Generated ${genResult.program.split('\n').length} lines of assembly`, detail: { targets: genResult.targets, rationale: genResult.rationale } });
@@ -200,6 +220,14 @@ export class Orchestrator {
       this.emit({ type: 'coverage-update', iteration: iter, report });
       lastReport = report;
       lastProgram = genResult.program;
+
+      // Accumulate hit instructions into the cumulative set — this is what
+      // gets passed to the Test Generator on the next iteration so it knows
+      // which instructions to avoid repeating and which to target.
+      for (const m of report.instructionCoverage.hitMnemonicSet) {
+        cumulativeHitInstructions.add(m);
+      }
+      coverageHistory.push({ iteration: iter, overall: report.overallCoverage });
 
       // ---- Step 5: Coverage Analysis Agent ----
       this.emit({ type: 'agent-activity', agent: 'Coverage Analyzer', phase: 'thinking', message: 'Summarizing coverage report...' });

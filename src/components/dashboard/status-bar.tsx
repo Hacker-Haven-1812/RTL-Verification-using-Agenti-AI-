@@ -22,14 +22,14 @@ export function StatusBar({ state }: Props) {
       <StatCard
         icon={Gauge}
         label="Overall Coverage"
-        value={r ? fmtPct(r.overallCoverage) : '—'}
-        progress={r?.overallCoverage}
+        value={state.cumulativeCoverage > 0 ? fmtPct(state.cumulativeCoverage) : (r ? fmtPct(r.overallCoverage) : '—')}
+        progress={state.cumulativeCoverage > 0 ? state.cumulativeCoverage : r?.overallCoverage}
       />
       <StatCard
         icon={Layers}
         label="Instructions"
-        value={r ? `${r.instructionCoverage.hit}/${r.instructionCoverage.total}` : '—'}
-        progress={r?.instructionCoverage.ratio}
+        value={state.cumulativeInstructionCount > 0 ? `${state.cumulativeInstructionCount}/${r?.instructionCoverage.total ?? 39}` : (r ? `${r.instructionCoverage.hit}/${r.instructionCoverage.total}` : '—')}
+        progress={state.cumulativeInstructionCount > 0 ? state.cumulativeInstructionCount / 39 : r?.instructionCoverage.ratio}
       />
       <StatCard
         icon={Activity}

@@ -34,9 +34,9 @@ const SEED_SCENARIOS = [
 ];
 
 export function ControlPanel({ status, onStart, onAbort, onReset, availableModules }: Props) {
-  const [coverageGoal, setCoverageGoal] = useState(0.85);
-  const [maxIterations, setMaxIterations] = useState(4);
-  const [maxCycles, setMaxCycles] = useState(1500);
+  const [coverageGoal, setCoverageGoal] = useState(0.70);
+  const [maxIterations, setMaxIterations] = useState(6);
+  const [maxCycles, setMaxCycles] = useState(2000);
   const [targetModules, setTargetModules] = useState<string[]>(availableModules);
   const [useSeedScenarios, setUseSeedScenarios] = useState(true);
   const [selectedSeeds, setSelectedSeeds] = useState<string[]>(['ARITH_OVERFLOW', 'BRANCH_TAKEN', 'MEMORY_LOAD', 'DATA_HAZARD_RAW']);

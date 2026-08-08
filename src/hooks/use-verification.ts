@@ -26,6 +26,9 @@ const INITIAL_STATE: VerificationState = {
   errors: [],
   sessionStartTime: null,
   sessionEndTime: null,
+  cumulativeCoverage: 0,
+  cumulativeHitInstructions: [],
+  cumulativeInstructionCount: 0,
 };
 
 type Action =
@@ -100,16 +103,58 @@ function reducer(state: VerificationState, action: Action): VerificationState {
           return state;
         case 'coverage-update': {
           const r = e.report;
+          // Track cumulative hit instructions across ALL iterations
+          const newHits = r.instructionCoverage.hitMnemonicSet.filter(
+            m => !state.cumulativeHitInstructions.includes(m)
+          );
+          const cumulativeHit = [...state.cumulativeHitInstructions, ...newHits];
+          const cumulativeInstructionCount = cumulativeHit.length;
+
+          // Recompute cumulative coverage: use the union of hit instructions
+          // and take the max of other metrics across iterations
+          const cumulativeInstrRatio = cumulativeInstructionCount / r.instructionCoverage.total;
+          const cumulativeOverall =
+            cumulativeInstrRatio * 0.30 +
+            Math.max(state.latestReport?.branchCoverage.ratio ?? 0, r.branchCoverage.ratio) * 0.20 +
+            Math.max(state.latestReport?.registerCoverage.ratio ?? 0, r.registerCoverage.ratio) * 0.10 +
+            Math.max(state.latestReport?.hazardCoverage.ratio ?? 0, r.hazardCoverage.ratio) * 0.10 +
+            Math.min(1, (Math.max(state.latestReport?.memoryCoverage.bytesTouched ?? 0, r.memoryCoverage.bytesTouched)) / 256) * 0.10 +
+            Math.max(state.latestReport?.functionalCoverage.ratio ?? 0, r.functionalCoverage.ratio) * 0.20;
+
           const hist = [...state.coverageHistory, {
             iteration: e.iteration,
-            overall: r.overallCoverage,
-            instruction: r.instructionCoverage.ratio,
-            branch: r.branchCoverage.ratio,
-            register: r.registerCoverage.ratio,
-            hazard: r.hazardCoverage.ratio,
-            functional: r.functionalCoverage.ratio,
+            overall: cumulativeOverall,  // show cumulative in sparkline
+            instruction: cumulativeInstrRatio,
+            branch: Math.max(state.latestReport?.branchCoverage.ratio ?? 0, r.branchCoverage.ratio),
+            register: Math.max(state.latestReport?.registerCoverage.ratio ?? 0, r.registerCoverage.ratio),
+            hazard: Math.max(state.latestReport?.hazardCoverage.ratio ?? 0, r.hazardCoverage.ratio),
+            functional: Math.max(state.latestReport?.functionalCoverage.ratio ?? 0, r.functionalCoverage.ratio),
           }];
-          return { ...state, coverageHistory: hist, latestReport: r };
+
+          // Build a merged "cumulative report" for display: same as the latest
+          // report but with the cumulative instruction hit/miss sets
+          const cumulativeReport = {
+            ...r,
+            overallCoverage: cumulativeOverall,
+            instructionCoverage: {
+              ...r.instructionCoverage,
+              hit: cumulativeInstructionCount,
+              ratio: cumulativeInstrRatio,
+              hitMnemonicSet: cumulativeHit,
+              missingMnemonicSet: r.instructionCoverage.missingMnemonicSet.filter(
+                m => !cumulativeHit.includes(m)
+              ),
+            },
+          };
+
+          return {
+            ...state,
+            coverageHistory: hist,
+            latestReport: cumulativeReport,  // show cumulative in coverage panel
+            cumulativeCoverage: cumulativeOverall,
+            cumulativeHitInstructions: cumulativeHit,
+            cumulativeInstructionCount,
+          };
         }
         case 'coverage-analysis':
           return { ...state, latestAnalysis: e.analysis };

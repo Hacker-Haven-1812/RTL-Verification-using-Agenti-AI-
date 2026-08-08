@@ -1,0 +1,11 @@
+{
+  "name": "riscv-verify-mini-service",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "bun --hot index.ts"
+  },
+  "dependencies": {
+    "socket.io": "^4.7.0",
+    "z-ai-web-dev-sdk": "^0.0.18"
+  }
+}

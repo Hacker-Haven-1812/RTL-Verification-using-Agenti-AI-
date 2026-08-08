@@ -14,21 +14,16 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Agentic RISC-V RTL Verification — VLSID 2026",
+  title: "RV32I Verification Console",
   description:
-    "Real-time AI-driven multi-agent framework for autonomous RTL functional verification of RISC-V processors. Case Generation, Coverage Analysis, Missing Case Suggestion, and Formal Property Generation agents running a live closed-loop verification flow.",
+    "Autonomous RTL verification and testing framework for RISC-V processors — closed-loop simulation with coverage closure and formal property checking.",
   keywords: [
     "RISC-V",
     "RTL Verification",
-    "Agentic AI",
-    "Formal Verification",
     "Coverage Closure",
-    "VLSID 2026",
-    "VLSI Design",
-    "SymbiYosys",
-    "Verilator",
+    "Formal Verification",
+    "RV32I",
   ],
-  authors: [{ name: "VLSID 2026 User Design Track" }],
 };
 
 export default function RootLayout({

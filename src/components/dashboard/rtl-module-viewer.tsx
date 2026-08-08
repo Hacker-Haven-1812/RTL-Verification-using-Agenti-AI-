@@ -108,13 +108,13 @@ export function RtlModuleViewer({ activeModules }: Props) {
                 onClick={() => setSelected(m.name)}
                 className={`text-[10px] font-mono px-2 py-0.5 rounded border transition-colors ${
                   selected === m.name
-                    ? 'border-emerald-500/40 text-emerald-400 bg-emerald-500/5'
+                    ? 'border-primary/40 text-primary bg-primary/5'
                     : 'border-border text-muted-foreground hover:bg-muted/50'
                 }`}
               >
                 {m.name}
                 {activeModules.includes(m.name) && (
-                  <span className="ml-1 inline-block h-1 w-1 rounded-full bg-emerald-500"></span>
+                  <span className="ml-1 inline-block h-1 w-1 rounded-full bg-primary"></span>
                 )}
               </button>
             ))}
@@ -147,9 +147,9 @@ export function RtlModuleViewer({ activeModules }: Props) {
                   </div>
                   {mod.ports.map((p) => (
                     <div key={p.name} className="grid grid-cols-[1fr_3rem_3rem_1.5fr] gap-2 px-2 py-1 border-b border-border/20 text-[11px] last:border-b-0">
-                      <div className="font-mono text-cyan-400">{p.name}</div>
+                      <div className="font-mono text-primary">{p.name}</div>
                       <div>
-                        <Badge variant="outline" className={`text-[9px] py-0 px-1 ${p.dir === 'input' ? 'border-amber-500/40 text-amber-400' : 'border-emerald-500/40 text-emerald-400'}`}>
+                        <Badge variant="outline" className={`text-[9px] py-0 px-1 ${p.dir === 'input' ? 'border-primary/40 text-primary' : 'border-primary/40 text-primary'}`}>
                           {p.dir === 'input' ? 'in' : 'out'}
                         </Badge>
                       </div>

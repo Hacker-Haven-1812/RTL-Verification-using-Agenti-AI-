@@ -66,8 +66,8 @@ export function CustomInputPanel({ isRunning, onRunProgram, onCheckProperty }: P
       <CardHeader className="pb-2 flex-shrink-0">
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <FileCode2 className="h-4 w-4 text-cyan-400" />
-            Direct User Input
+            <FileCode2 className="h-4 w-4 text-primary" />
+            Manual Input
           </CardTitle>
           <TooltipProvider>
             <Tooltip>
@@ -76,7 +76,7 @@ export function CustomInputPanel({ isRunning, onRunProgram, onCheckProperty }: P
               </TooltipTrigger>
               <TooltipContent side="bottom" className="max-w-sm">
                 <div className="text-[11px] space-y-1">
-                  <div>Bypass the AI agents entirely.</div>
+                  <div>Run your own programs or properties directly.</div>
                   <div>• <b>Assembly</b>: write RV32I code, we assemble + simulate + analyze coverage in real time.</div>
                   <div>• <b>Property</b>: write a formal property in our DSL, we parse + check it with 2000 random trials.</div>
                 </div>
@@ -141,7 +141,6 @@ export function CustomInputPanel({ isRunning, onRunProgram, onCheckProperty }: P
               <Button
                 onClick={() => onRunProgram(program)}
                 disabled={isRunning || !program.trim()}
-                className="bg-cyan-600 hover:bg-cyan-500 text-white"
                 size="sm"
               >
                 <Play className="h-3 w-3 mr-1.5" />
@@ -162,7 +161,7 @@ export function CustomInputPanel({ isRunning, onRunProgram, onCheckProperty }: P
                     disabled={isRunning}
                     className={`text-[10px] font-mono px-2 py-0.5 rounded border transition-colors ${
                       moduleName === m
-                        ? 'border-fuchsia-500/40 text-fuchsia-400 bg-fuchsia-500/5'
+                        ? 'border-primary/40 text-primary bg-primary/5'
                         : 'border-border text-muted-foreground bg-card/50 hover:bg-muted/50'
                     } ${isRunning ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
@@ -207,7 +206,6 @@ export function CustomInputPanel({ isRunning, onRunProgram, onCheckProperty }: P
               <Button
                 onClick={() => onCheckProperty(moduleName, declaration)}
                 disabled={isRunning || !declaration.trim()}
-                className="bg-fuchsia-600 hover:bg-fuchsia-500 text-white"
                 size="sm"
               >
                 <ShieldCheck className="h-3 w-3 mr-1.5" />

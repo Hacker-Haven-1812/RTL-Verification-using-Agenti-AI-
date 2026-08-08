@@ -18,11 +18,11 @@ export function GeneratedProgramPanel({ program }: Props) {
     return (
       <Card className="h-full">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">Case Generation Agent Output</CardTitle>
+          <CardTitle className="text-sm font-medium">Generated Program</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="text-xs text-muted-foreground italic py-8 text-center">
-            The Case Generation Agent writes its RISC-V assembly program here, generated on demand by the LLM. No tests are pre-stored.
+            The Test Generator writes its RISC-V assembly program here. No tests are pre-stored.
           </div>
         </CardContent>
       </Card>
@@ -44,18 +44,18 @@ export function GeneratedProgramPanel({ program }: Props) {
       <CardHeader className="pb-2 flex-shrink-0">
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <CardTitle className="text-sm font-medium">
-            Case Generation — Iteration {program.iteration}
+            Generated Program — Iteration {program.iteration}
           </CardTitle>
           <div className="flex items-center gap-1.5">
             <Badge variant="outline" className="text-[10px]">
               {program.instructionCount} instrs
             </Badge>
             {program.assemblerErrors.length > 0 ? (
-              <Badge variant="outline" className="text-[10px] border-rose-500/40 text-rose-400">
+              <Badge variant="outline" className="text-[10px] border-destructive/40 text-destructive">
                 {program.assemblerErrors.length} asm errors
               </Badge>
             ) : (
-              <Badge variant="outline" className="text-[10px] border-emerald-500/40 text-emerald-400">
+              <Badge variant="outline" className="text-[10px] border-primary/40 text-primary">
                 assembled OK
               </Badge>
             )}
@@ -68,7 +68,7 @@ export function GeneratedProgramPanel({ program }: Props) {
         {program.targets.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-2">
             {program.targets.map((t, i) => (
-              <Badge key={i} variant="outline" className="text-[9px] py-0 px-1.5 border-fuchsia-500/40 text-fuchsia-400 bg-fuchsia-500/5">
+              <Badge key={i} variant="outline" className="text-[9px] py-0 px-1.5 border-primary/40 text-primary bg-primary/5">
                 {t}
               </Badge>
             ))}
@@ -81,7 +81,7 @@ export function GeneratedProgramPanel({ program }: Props) {
             <TabsTrigger value="asm" className="text-[11px]">Assembly</TabsTrigger>
             <TabsTrigger value="rationale" className="text-[11px]">Rationale</TabsTrigger>
             {program.assemblerErrors.length > 0 && (
-              <TabsTrigger value="errors" className="text-[11px] text-rose-400">
+              <TabsTrigger value="errors" className="text-[11px] text-destructive">
                 <AlertCircle className="h-3 w-3 mr-1" />
                 Errors
               </TabsTrigger>
@@ -106,7 +106,7 @@ export function GeneratedProgramPanel({ program }: Props) {
               <ScrollArea className="h-full max-h-[400px]">
                 <div className="p-3 space-y-1">
                   {program.assemblerErrors.map((e, i) => (
-                    <div key={i} className="text-[11px] font-mono text-rose-400 border border-rose-500/20 bg-rose-500/5 rounded px-2 py-1">
+                    <div key={i} className="text-[11px] font-mono text-destructive border border-destructive/20 bg-destructive/5 rounded px-2 py-1">
                       Line {e.line}: {e.message}
                     </div>
                   ))}

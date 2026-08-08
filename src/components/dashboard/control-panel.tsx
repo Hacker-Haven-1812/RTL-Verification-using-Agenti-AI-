@@ -68,17 +68,17 @@ export function ControlPanel({ status, onStart, onAbort, onReset, availableModul
     <Card>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-sm font-medium">Verification Run Configuration</CardTitle>
+          <CardTitle className="text-sm font-medium">Configuration</CardTitle>
           <Badge
             variant="outline"
             className={`text-[10px] ${
-              status === 'running' ? 'border-emerald-500/40 text-emerald-400 bg-emerald-500/5' :
-              status === 'completed' ? 'border-cyan-500/40 text-cyan-400 bg-cyan-500/5' :
-              status === 'error' ? 'border-rose-500/40 text-rose-400 bg-rose-500/5' :
+              status === 'running' ? 'border-primary/40 text-primary bg-primary/5' :
+              status === 'completed' ? 'border-primary/30 text-primary/80' :
+              status === 'error' ? 'border-destructive/40 text-destructive bg-destructive/5' :
               'border-border text-muted-foreground'
             }`}
           >
-            {status === 'running' && <span className="live-dot inline-block h-1.5 w-1.5 rounded-full bg-emerald-500 mr-1.5"></span>}
+            {status === 'running' && <span className="live-dot inline-block h-1.5 w-1.5 rounded-full bg-primary mr-1.5"></span>}
             {status}
           </Badge>
         </div>
@@ -88,7 +88,7 @@ export function ControlPanel({ status, onStart, onAbort, onReset, availableModul
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <Label className="text-xs">Coverage Goal</Label>
-            <span className="text-xs font-mono tabular-nums text-emerald-400">{(coverageGoal * 100).toFixed(0)}%</span>
+            <span className="text-xs font-mono tabular-nums text-primary">{(coverageGoal * 100).toFixed(0)}%</span>
           </div>
           <Slider
             value={[coverageGoal * 100]}
@@ -104,7 +104,7 @@ export function ControlPanel({ status, onStart, onAbort, onReset, availableModul
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <Label className="text-xs">Max Iterations</Label>
-            <span className="text-xs font-mono tabular-nums text-cyan-400">{maxIterations}</span>
+            <span className="text-xs font-mono tabular-nums text-primary">{maxIterations}</span>
           </div>
           <Slider
             value={[maxIterations]}
@@ -120,7 +120,7 @@ export function ControlPanel({ status, onStart, onAbort, onReset, availableModul
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <Label className="text-xs">Max Cycles / Run</Label>
-            <span className="text-xs font-mono tabular-nums text-amber-400">{maxCycles}</span>
+            <span className="text-xs font-mono tabular-nums text-primary">{maxCycles}</span>
           </div>
           <Slider
             value={[maxCycles]}
@@ -134,7 +134,7 @@ export function ControlPanel({ status, onStart, onAbort, onReset, availableModul
 
         {/* Target RTL modules */}
         <div className="space-y-1.5">
-          <Label className="text-xs">Target RTL Modules (formal verification)</Label>
+          <Label className="text-xs">Target modules (formal verification)</Label>
           <div className="flex flex-wrap gap-1">
             {availableModules.map((m) => (
               <button
@@ -143,7 +143,7 @@ export function ControlPanel({ status, onStart, onAbort, onReset, availableModul
                 disabled={isRunning}
                 className={`text-[10px] font-mono px-2 py-0.5 rounded border transition-colors ${
                   targetModules.includes(m)
-                    ? 'border-fuchsia-500/40 text-fuchsia-400 bg-fuchsia-500/5'
+                    ? 'border-primary/40 text-primary bg-primary/5'
                     : 'border-border text-muted-foreground bg-card/50 hover:bg-muted/50'
                 } ${isRunning ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
@@ -156,7 +156,7 @@ export function ControlPanel({ status, onStart, onAbort, onReset, availableModul
         {/* Seed scenarios */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <Label className="text-xs">Seed Scenarios (Iteration 1)</Label>
+            <Label className="text-xs">Seed scenarios (iteration 1)</Label>
             <div className="flex items-center gap-1.5">
               <span className="text-[10px] text-muted-foreground">{useSeedScenarios ? `${selectedSeeds.length} selected` : 'auto'}</span>
               <Switch checked={useSeedScenarios} onCheckedChange={setUseSeedScenarios} disabled={isRunning} />
@@ -171,7 +171,7 @@ export function ControlPanel({ status, onStart, onAbort, onReset, availableModul
                   disabled={isRunning}
                   className={`text-[9px] font-mono px-1.5 py-0.5 rounded border transition-colors ${
                     selectedSeeds.includes(s)
-                      ? 'border-amber-500/40 text-amber-400 bg-amber-500/5'
+                      ? 'border-primary/40 text-primary bg-primary/5'
                       : 'border-border text-muted-foreground bg-card/50 hover:bg-muted/50'
                   } ${isRunning ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
@@ -205,11 +205,11 @@ export function ControlPanel({ status, onStart, onAbort, onReset, availableModul
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <p className="text-[10px] text-muted-foreground italic cursor-help">
-                      ℹ Passed to the Case Generation Agent as additional context.
+                      ℹ Passed to the Test Generator as additional context.
                     </p>
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="max-w-xs">
-                    This hint is forwarded to the LLM. Use it to bias the agent toward specific instruction families or scenario types without writing tests yourself.
+                    Use this hint to bias test generation toward specific instruction families or scenario types without writing tests yourself.
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -220,7 +220,7 @@ export function ControlPanel({ status, onStart, onAbort, onReset, availableModul
         {/* Action buttons */}
         <div className="flex gap-2 pt-1">
           {!isRunning ? (
-            <Button onClick={handleStart} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white">
+            <Button onClick={handleStart} className="flex-1">
               <Play className="h-3.5 w-3.5 mr-1.5" />
               Start Verification
             </Button>
@@ -235,8 +235,8 @@ export function ControlPanel({ status, onStart, onAbort, onReset, availableModul
           </Button>
         </div>
 
-        <div className="text-[10px] text-muted-foreground italic">
-          All test programs and formal properties are generated on demand by AI agents. Nothing is pre-stored.
+        <div className="text-[10px] text-muted-foreground">
+          Test programs and formal properties are generated on demand. Nothing is pre-stored.
         </div>
       </CardContent>
     </Card>

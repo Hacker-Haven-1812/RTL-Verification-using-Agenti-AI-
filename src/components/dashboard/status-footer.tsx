@@ -82,7 +82,7 @@ export function StatusFooter({ state, onReset }: Props) {
     <>
       {/* Sticky bottom status bar */}
       <div className="sticky bottom-0 z-30 mt-3">
-        <Card className={`border-t-2 ${isRunning ? 'border-t-emerald-500' : isCompleted ? 'border-t-cyan-500' : isError ? 'border-t-rose-500' : 'border-t-border'} bg-card/95 backdrop-blur-sm shadow-lg`}>
+        <Card className={`border-t-2 ${isRunning ? 'border-t-primary' : isCompleted ? 'border-t-primary' : isError ? 'border-t-destructive' : 'border-t-border'} bg-card/95 backdrop-blur-sm shadow-lg`}>
           <CardContent className="px-3 py-2.5">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               {/* Status + phase */}
@@ -90,16 +90,16 @@ export function StatusFooter({ state, onReset }: Props) {
                 <StatusIcon status={state.status} />
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className={`text-xs font-medium ${isRunning ? 'text-emerald-400' : isCompleted ? 'text-cyan-400' : isError ? 'text-rose-400' : 'text-muted-foreground'}`}>
+                    <span className={`text-xs font-medium ${isRunning ? 'text-primary' : isCompleted ? 'text-primary' : isError ? 'text-destructive' : 'text-muted-foreground'}`}>
                       {isRunning ? 'VERIFICATION RUNNING' : isCompleted ? 'VERIFICATION COMPLETE' : isError ? 'ERROR' : 'IDLE'}
                     </span>
                     {isRunning && state.currentIteration > 0 && (
-                      <Badge variant="outline" className="text-[9px] py-0 px-1 border-emerald-500/40 text-emerald-400">
+                      <Badge variant="outline" className="text-[9px] py-0 px-1 border-primary/40 text-primary">
                         iter {state.currentIteration} / {state.totalIterations}
                       </Badge>
                     )}
                     {isCompleted && state.simLoopEndReason && (
-                      <Badge variant="outline" className={`text-[9px] py-0 px-1 ${state.simLoopEndReason === 'goal-met' ? 'border-emerald-500/40 text-emerald-400' : 'border-amber-500/40 text-amber-400'}`}>
+                      <Badge variant="outline" className={`text-[9px] py-0 px-1 ${state.simLoopEndReason === 'goal-met' ? 'border-primary/40 text-primary' : 'border-primary/40 text-primary'}`}>
                         {state.simLoopEndReason === 'goal-met' ? 'goal met' : 'max iters reached'}
                       </Badge>
                     )}
@@ -159,7 +159,7 @@ export function StatusFooter({ state, onReset }: Props) {
             {/* Progress bar */}
             {isRunning && state.totalIterations > 0 && (
               <div className="mt-2 h-0.5 rounded-full bg-muted overflow-hidden">
-                <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${progress}%` }} />
+                <div className="h-full bg-primary transition-all duration-500" style={{ width: `${progress}%` }} />
               </div>
             )}
           </CardContent>
@@ -176,23 +176,23 @@ export function StatusFooter({ state, onReset }: Props) {
 
 function StatusIcon({ status }: { status: string }) {
   if (status === 'running') {
-    return <Loader2 className="h-5 w-5 text-emerald-400 animate-spin" />;
+    return <Loader2 className="h-5 w-5 text-primary animate-spin" />;
   }
   if (status === 'completed') {
-    return <CheckCircle2 className="h-5 w-5 text-cyan-400" />;
+    return <CheckCircle2 className="h-5 w-5 text-primary" />;
   }
   if (status === 'error') {
-    return <AlertCircle className="h-5 w-5 text-rose-400" />;
+    return <AlertCircle className="h-5 w-5 text-destructive" />;
   }
   return <PauseCircle className="h-5 w-5 text-muted-foreground" />;
 }
 
 function Metric({ icon: Icon, label, value, color }: { icon: typeof Target; label: string; value: string; color: string }) {
   const colors: Record<string, string> = {
-    emerald: 'text-emerald-400',
-    cyan: 'text-cyan-400',
-    amber: 'text-amber-400',
-    rose: 'text-rose-400',
+    emerald: 'text-primary',
+    cyan: 'text-primary',
+    amber: 'text-primary',
+    rose: 'text-destructive',
   };
   return (
     <div className="flex items-center gap-1.5">
@@ -227,12 +227,12 @@ function SummaryModal({ state, formalSummary, elapsed, onClose, onReset }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
-      <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto border-emerald-500/30" onClick={(e) => e.stopPropagation()}>
+      <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto border-primary/30" onClick={(e) => e.stopPropagation()}>
         <CardContent className="p-6">
           {/* Header */}
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
-              <CheckCircle2 className="h-8 w-8 text-emerald-400" />
+              <CheckCircle2 className="h-8 w-8 text-primary" />
               <div>
                 <h2 className="text-lg font-semibold">Verification Session Complete</h2>
                 <p className="text-xs text-muted-foreground font-mono">{state.sessionId}</p>
@@ -244,17 +244,17 @@ function SummaryModal({ state, formalSummary, elapsed, onClose, onReset }: {
           {/* Outcome banner */}
           <div className={`rounded-md border p-3 mb-4 ${
             state.simLoopEndReason === 'goal-met'
-              ? 'border-emerald-500/40 bg-emerald-500/5'
-              : 'border-amber-500/40 bg-amber-500/5'
+              ? 'border-primary/40 bg-primary/5'
+              : 'border-primary/40 bg-primary/5'
           }`}>
             <div className="flex items-center gap-2">
               {state.simLoopEndReason === 'goal-met' ? (
-                <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+                <CheckCircle2 className="h-5 w-5 text-primary" />
               ) : (
-                <AlertCircle className="h-5 w-5 text-amber-400" />
+                <AlertCircle className="h-5 w-5 text-primary" />
               )}
               <div>
-                <div className={`text-sm font-medium ${state.simLoopEndReason === 'goal-met' ? 'text-emerald-400' : 'text-amber-400'}`}>
+                <div className={`text-sm font-medium ${state.simLoopEndReason === 'goal-met' ? 'text-primary' : 'text-primary'}`}>
                   {state.simLoopEndReason === 'goal-met' ? 'Coverage goal achieved' : 'Max iterations reached'}
                 </div>
                 <div className="text-[11px] text-muted-foreground">
@@ -295,7 +295,7 @@ function SummaryModal({ state, formalSummary, elapsed, onClose, onReset }: {
               <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Functional Scenarios</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-1 max-h-40 overflow-y-auto">
                 {r.functionalCoverage.scenarios.map((s, i) => (
-                  <div key={i} className={`text-[11px] flex items-center gap-1.5 ${s.hit ? 'text-emerald-400' : 'text-muted-foreground'}`}>
+                  <div key={i} className={`text-[11px] flex items-center gap-1.5 ${s.hit ? 'text-primary' : 'text-muted-foreground'}`}>
                     {s.hit ? <CheckCircle2 className="h-3 w-3 flex-shrink-0" /> : <XCircle className="h-3 w-3 flex-shrink-0 opacity-40" />}
                     <span className="truncate">{s.name}</span>
                   </div>
@@ -311,18 +311,18 @@ function SummaryModal({ state, formalSummary, elapsed, onClose, onReset }: {
               <div className="space-y-1">
                 {Object.entries(state.formalResults).map(([mod, data]) => (
                   <div key={mod} className="flex items-center justify-between text-xs bg-card/50 rounded-md border border-border/40 px-2 py-1.5">
-                    <span className="font-mono text-fuchsia-400">{mod}</span>
+                    <span className="font-mono text-primary">{mod}</span>
                     <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="text-[9px] border-emerald-500/40 text-emerald-400 bg-emerald-500/5">
+                      <Badge variant="outline" className="text-[9px] border-primary/40 text-primary bg-primary/5">
                         <CheckCircle2 className="h-2.5 w-2.5 mr-1" />
                         {data.summary?.proof ?? 0} proof
                       </Badge>
-                      <Badge variant="outline" className="text-[9px] border-rose-500/40 text-rose-400 bg-rose-500/5">
+                      <Badge variant="outline" className="text-[9px] border-destructive/40 text-destructive bg-destructive/5">
                         <XCircle className="h-2.5 w-2.5 mr-1" />
                         {data.summary?.counterexample ?? 0} cex
                       </Badge>
                       {(data.summary?.errors ?? 0) > 0 && (
-                        <Badge variant="outline" className="text-[9px] border-amber-500/40 text-amber-400 bg-amber-500/5">
+                        <Badge variant="outline" className="text-[9px] border-primary/40 text-primary bg-primary/5">
                           {data.summary?.errors} err
                         </Badge>
                       )}
@@ -333,15 +333,15 @@ function SummaryModal({ state, formalSummary, elapsed, onClose, onReset }: {
             </div>
           )}
 
-          {/* Coverage Analysis (LLM) */}
+          {/* Coverage Analysis */}
           {state.latestAnalysis && (
             <div className="mb-4">
-              <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Coverage Analysis (LLM)</h3>
-              <div className="rounded-md border border-cyan-500/30 bg-cyan-500/5 p-2">
+              <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Coverage Analysis</h3>
+              <div className="rounded-md border border-primary/30 bg-primary/5 p-2">
                 <p className="text-xs text-foreground">{state.latestAnalysis.summary}</p>
                 {state.latestAnalysis.prioritizedRecommendations.length > 0 && (
                   <div className="mt-2">
-                    <div className="text-[10px] uppercase tracking-wider text-amber-400 mb-1">Top Recommendations</div>
+                    <div className="text-[10px] uppercase tracking-wider text-primary mb-1">Top Recommendations</div>
                     <ul className="text-[11px] text-muted-foreground space-y-0.5 list-decimal list-inside">
                       {state.latestAnalysis.prioritizedRecommendations.slice(0, 3).map((r, i) => (
                         <li key={i}>{r}</li>
@@ -361,7 +361,7 @@ function SummaryModal({ state, formalSummary, elapsed, onClose, onReset }: {
             </div>
             <div className="flex gap-2">
               <Button size="sm" variant="outline" onClick={onClose}>Close</Button>
-              <Button size="sm" onClick={onReset} className="bg-emerald-600 hover:bg-emerald-500 text-white">
+              <Button size="sm" onClick={onReset} className="bg-primary hover:bg-primary text-white">
                 Start New Run
               </Button>
             </div>
@@ -374,10 +374,10 @@ function SummaryModal({ state, formalSummary, elapsed, onClose, onReset }: {
 
 function SummaryMetric({ label, value, accent }: { label: string; value: string; accent: string }) {
   const colors: Record<string, string> = {
-    emerald: 'border-emerald-500/40 bg-emerald-500/5 text-emerald-400',
-    cyan: 'border-cyan-500/40 bg-cyan-500/5 text-cyan-400',
-    amber: 'border-amber-500/40 bg-amber-500/5 text-amber-400',
-    rose: 'border-rose-500/40 bg-rose-500/5 text-rose-400',
+    emerald: 'border-primary/40 bg-primary/5 text-primary',
+    cyan: 'border-primary/40 bg-primary/5 text-primary',
+    amber: 'border-primary/40 bg-primary/5 text-primary',
+    rose: 'border-destructive/40 bg-destructive/5 text-destructive',
   };
   return (
     <div className={`rounded-md border px-3 py-2 ${colors[accent]}`}>
@@ -389,7 +389,7 @@ function SummaryMetric({ label, value, accent }: { label: string; value: string;
 
 function BreakdownRow({ label, value, pct }: { label: string; value: string; pct: number }) {
   const p = Math.min(100, pct * 100);
-  const color = p >= 80 ? 'bg-emerald-500' : p >= 50 ? 'bg-amber-500' : 'bg-rose-500';
+  const color = p >= 80 ? 'bg-primary' : p >= 50 ? 'bg-primary/60' : 'bg-muted-foreground/40';
   return (
     <div className="rounded-md border border-border/40 bg-card/50 px-2 py-1.5">
       <div className="flex items-center justify-between text-[11px] mb-1">

@@ -16,10 +16,10 @@ interface Props {
 }
 
 const STATUS_STYLE: Record<string, { icon: typeof CheckCircle2; color: string; label: string }> = {
-  proof: { icon: CheckCircle2, color: 'text-emerald-400 border-emerald-500/40 bg-emerald-500/5', label: 'Proof' },
-  counterexample: { icon: XCircle, color: 'text-rose-400 border-rose-500/40 bg-rose-500/5', label: 'Counterexample' },
-  'parse-error': { icon: AlertTriangle, color: 'text-amber-400 border-amber-500/40 bg-amber-500/5', label: 'Parse Error' },
-  'runtime-error': { icon: AlertTriangle, color: 'text-amber-400 border-amber-500/40 bg-amber-500/5', label: 'Runtime Error' },
+  proof: { icon: CheckCircle2, color: 'text-primary border-primary/40 bg-primary/5', label: 'Proof' },
+  counterexample: { icon: XCircle, color: 'text-destructive border-destructive/40 bg-destructive/5', label: 'Counterexample' },
+  'parse-error': { icon: AlertTriangle, color: 'text-primary border-primary/40 bg-primary/5', label: 'Parse Error' },
+  'runtime-error': { icon: AlertTriangle, color: 'text-primary border-primary/40 bg-primary/5', label: 'Runtime Error' },
 };
 
 export function FormalVerificationPanel({ formalResults }: Props) {
@@ -33,20 +33,20 @@ export function FormalVerificationPanel({ formalResults }: Props) {
       <CardHeader className="pb-2 flex-shrink-0">
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <ShieldCheck className="h-4 w-4 text-fuchsia-400" />
+            <ShieldCheck className="h-4 w-4 text-primary" />
             Formal Verification Path
           </CardTitle>
           <div className="flex items-center gap-1.5">
-            <Badge variant="outline" className="text-[10px] border-emerald-500/40 text-emerald-400 bg-emerald-500/5">
+            <Badge variant="outline" className="text-[10px] border-primary/40 text-primary bg-primary/5">
               <CheckCircle2 className="h-2.5 w-2.5 mr-1" />
               {totalProof} proof
             </Badge>
-            <Badge variant="outline" className="text-[10px] border-rose-500/40 text-rose-400 bg-rose-500/5">
+            <Badge variant="outline" className="text-[10px] border-destructive/40 text-destructive bg-destructive/5">
               <XCircle className="h-2.5 w-2.5 mr-1" />
               {totalCEX} cex
             </Badge>
             {totalErr > 0 && (
-              <Badge variant="outline" className="text-[10px] border-amber-500/40 text-amber-400 bg-amber-500/5">
+              <Badge variant="outline" className="text-[10px] border-primary/40 text-primary bg-primary/5">
                 <AlertTriangle className="h-2.5 w-2.5 mr-1" />
                 {totalErr} err
               </Badge>
@@ -59,7 +59,7 @@ export function FormalVerificationPanel({ formalResults }: Props) {
           <div className="px-3 pb-3 pt-2">
             {modules.length === 0 && (
               <div className="text-xs text-muted-foreground italic py-8 text-center">
-                Formal verification results will appear here as the Property Generation Agent produces properties and the checker evaluates them against the RTL.
+                Formal verification results will appear here as the Property Synthesizer generates properties and the checker evaluates them against the RTL.
               </div>
             )}
             <Accordion type="multiple" defaultValue={modules.map(([m]) => m)} className="w-full">
@@ -67,7 +67,7 @@ export function FormalVerificationPanel({ formalResults }: Props) {
                 <AccordionItem key={moduleName} value={moduleName} className="border-border/40">
                   <AccordionTrigger className="text-xs hover:no-underline py-2">
                     <div className="flex items-center gap-2 flex-1">
-                      <span className="font-mono text-fuchsia-400">{moduleName}</span>
+                      <span className="font-mono text-primary">{moduleName}</span>
                       <Badge variant="outline" className="text-[9px] py-0">
                         {data.properties.length} props · {data.results.length} checked
                       </Badge>
@@ -91,19 +91,19 @@ export function FormalVerificationPanel({ formalResults }: Props) {
                               </span>
                             </div>
                             {r.status === 'counterexample' && r.counterexample && (
-                              <div className="mt-1.5 ml-5 text-[10px] font-mono text-rose-300/80 bg-rose-500/5 border border-rose-500/20 rounded p-1.5">
-                                <div className="text-[9px] uppercase tracking-wider text-rose-400 mb-1">Counterexample input:</div>
+                              <div className="mt-1.5 ml-5 text-[10px] font-mono text-destructive/80 bg-destructive/5 border border-destructive/20 rounded p-1.5">
+                                <div className="text-[9px] uppercase tracking-wider text-destructive mb-1">Counterexample input:</div>
                                 {Object.entries(r.counterexample).map(([k, v]) => (
                                   <div key={k}>
-                                    <span className="text-rose-300">{k}</span>
-                                    <span className="text-rose-400/60"> = </span>
-                                    <span className="text-rose-200">0x{(v >>> 0).toString(16)} ({v})</span>
+                                    <span className="text-destructive/80">{k}</span>
+                                    <span className="text-destructive/60"> = </span>
+                                    <span className="text-destructive/70">0x{(v >>> 0).toString(16)} ({v})</span>
                                   </div>
                                 ))}
                               </div>
                             )}
                             {r.error && (
-                              <div className="mt-1 ml-5 text-[10px] text-amber-300/80 font-mono break-all">
+                              <div className="mt-1 ml-5 text-[10px] text-primary/80/80 font-mono break-all">
                                 {r.error}
                               </div>
                             )}

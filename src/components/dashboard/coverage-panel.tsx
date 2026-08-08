@@ -17,11 +17,11 @@ function fmtPct(r: number | undefined | null): string {
 }
 
 function pctColor(r: number | undefined | null): string {
-  if (r === null || r === undefined) return 'bg-muted';
+  if (r === null || r === undefined) return 'bg-muted-foreground/30';
   const p = r * 100;
-  if (p >= 80) return 'bg-emerald-500';
-  if (p >= 50) return 'bg-amber-500';
-  return 'bg-rose-500';
+  if (p >= 80) return 'bg-primary';
+  if (p >= 50) return 'bg-primary/60';
+  return 'bg-muted-foreground/40';
 }
 
 export function CoveragePanel({ report, history }: Props) {
@@ -62,14 +62,14 @@ export function CoveragePanel({ report, history }: Props) {
               <svg width={sparkline.W} height={sparkline.H} className="overflow-visible">
                 <defs>
                   <linearGradient id="spark-fill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="oklch(0.7 0.16 155)" stopOpacity="0.4" />
-                    <stop offset="100%" stopColor="oklch(0.7 0.16 155)" stopOpacity="0" />
+                    <stop offset="0%" stopColor="oklch(0.72 0.13 55)" stopOpacity="0.3" />
+                    <stop offset="100%" stopColor="oklch(0.72 0.13 55)" stopOpacity="0" />
                   </linearGradient>
                 </defs>
                 <path d={sparkline.areaPath} fill="url(#spark-fill)" />
-                <path d={sparkline.path} fill="none" stroke="oklch(0.7 0.16 155)" strokeWidth="1.5" />
+                <path d={sparkline.path} fill="none" stroke="oklch(0.72 0.13 55)" strokeWidth="1.5" />
                 {sparkline.pts.map((p, i) => (
-                  <circle key={i} cx={p.x} cy={p.y} r="2" fill="oklch(0.7 0.16 155)" />
+                  <circle key={i} cx={p.x} cy={p.y} r="2" fill="oklch(0.72 0.13 55)" />
                 ))}
               </svg>
             )}
@@ -113,23 +113,23 @@ export function CoveragePanel({ report, history }: Props) {
         {/* Missing scenarios */}
         {report && report.missingScenarios.length > 0 && (
           <TooltipProvider delayDuration={200}>
-            <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-2">
+            <div className="rounded-md border border-border bg-muted/30 p-2">
               <div className="flex items-center justify-between mb-1">
-                <div className="text-[10px] uppercase tracking-wider text-amber-400">Coverage Gaps</div>
-                <Badge variant="outline" className="text-[10px] text-amber-400 border-amber-500/30">
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Coverage Gaps</div>
+                <Badge variant="outline" className="text-[10px]">
                   {report.missingScenarios.length} missing
                 </Badge>
               </div>
               <div className="max-h-24 overflow-y-auto space-y-0.5">
                 {report.missingScenarios.slice(0, 12).map((s, i) => (
                   <div key={i} className="text-[11px] text-muted-foreground truncate">
-                    <span className="text-amber-500/70">•</span> {s}
+                    <span className="text-muted-foreground/60">•</span> {s}
                   </div>
                 ))}
                 {report.missingScenarios.length > 12 && (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <div className="text-[11px] text-amber-400/70 cursor-help">+ {report.missingScenarios.length - 12} more…</div>
+                      <div className="text-[11px] text-muted-foreground cursor-help">+ {report.missingScenarios.length - 12} more…</div>
                     </TooltipTrigger>
                     <TooltipContent side="bottom" className="max-w-md">
                       <div className="space-y-0.5 max-h-60 overflow-y-auto">
@@ -151,12 +151,12 @@ export function CoveragePanel({ report, history }: Props) {
             <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">RV32I Instruction Coverage</div>
             <div className="flex flex-wrap gap-1">
               {report.instructionCoverage.hitMnemonicSet.map((m) => (
-                <Badge key={m} variant="outline" className="text-[10px] py-0 px-1.5 border-emerald-500/40 text-emerald-400 bg-emerald-500/5">
+                <Badge key={m} variant="outline" className="text-[10px] py-0 px-1.5 border-primary/40 text-primary bg-primary/5">
                   {m}
                 </Badge>
               ))}
               {report.instructionCoverage.missingMnemonicSet.map((m) => (
-                <Badge key={m} variant="outline" className="text-[10px] py-0 px-1.5 border-rose-500/30 text-rose-400/60 bg-rose-500/5 line-through">
+                <Badge key={m} variant="outline" className="text-[10px] py-0 px-1.5 border-border text-muted-foreground/50 line-through">
                   {m}
                 </Badge>
               ))}

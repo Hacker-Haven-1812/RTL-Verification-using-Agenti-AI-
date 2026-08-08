@@ -113,7 +113,7 @@ export class Orchestrator {
       let genResult: any = null;
       const MAX_CASEGEN_RETRIES = 3;
       for (let attempt = 1; attempt <= MAX_CASEGEN_RETRIES && !this.aborted; attempt++) {
-        this.emit({ type: 'agent-activity', agent: 'Case Generation', phase: 'thinking', message: `Generating test program for iteration ${iter}${attempt > 1 ? ` (attempt ${attempt}/${MAX_CASEGEN_RETRIES})` : ''}...` });
+        this.emit({ type: 'agent-activity', agent: 'Test Generator', phase: 'thinking', message: `Generating test program for iteration ${iter}${attempt > 1 ? ` (attempt ${attempt}/${MAX_CASEGEN_RETRIES})` : ''}...` });
         try {
           genResult = await caseGenerationAgent({
             iteration: iter,
@@ -129,7 +129,7 @@ export class Orchestrator {
           break; // success
         } catch (e: any) {
           const msg = e?.message ?? String(e);
-          this.emit({ type: 'agent-activity', agent: 'Case Generation', phase: 'done', message: `Attempt ${attempt} failed: ${msg.slice(0, 100)}` });
+          this.emit({ type: 'agent-activity', agent: 'Test Generator', phase: 'done', message: `Attempt ${attempt} failed: ${msg.slice(0, 100)}` });
           if (attempt < MAX_CASEGEN_RETRIES) {
             // Brief delay before retry — the llmChat helper already does backoff for 429s
             // but this also covers non-429 failures.
@@ -145,7 +145,7 @@ export class Orchestrator {
         // Skip this iteration but continue the loop
         continue;
       }
-      this.emit({ type: 'agent-activity', agent: 'Case Generation', phase: 'done', message: `Generated ${genResult.program.split('\n').length} lines of assembly`, detail: { targets: genResult.targets, rationale: genResult.rationale } });
+      this.emit({ type: 'agent-activity', agent: 'Test Generator', phase: 'done', message: `Generated ${genResult.program.split('\n').length} lines of assembly`, detail: { targets: genResult.targets, rationale: genResult.rationale } });
 
       // ---- Step 2: Assemble ----
       const asm = assemble(genResult.program);
@@ -202,14 +202,14 @@ export class Orchestrator {
       lastProgram = genResult.program;
 
       // ---- Step 5: Coverage Analysis Agent ----
-      this.emit({ type: 'agent-activity', agent: 'Coverage Analysis', phase: 'thinking', message: 'Summarizing coverage report...' });
+      this.emit({ type: 'agent-activity', agent: 'Coverage Analyzer', phase: 'thinking', message: 'Summarizing coverage report...' });
       try {
         const analysis = await coverageAnalysisAgent(report);
         this.emit({ type: 'coverage-analysis', iteration: iter, analysis });
         lastAnalysis = analysis;
-        this.emit({ type: 'agent-activity', agent: 'Coverage Analysis', phase: 'done', message: analysis.summary || 'Analysis complete' });
+        this.emit({ type: 'agent-activity', agent: 'Coverage Analyzer', phase: 'done', message: analysis.summary || 'Analysis complete' });
       } catch (e: any) {
-        this.emit({ type: 'agent-activity', agent: 'Coverage Analysis', phase: 'done', message: `Agent error: ${e.message}` });
+        this.emit({ type: 'agent-activity', agent: 'Coverage Analyzer', phase: 'done', message: `Error: ${e.message}` });
       }
 
       // ---- Step 6: Goal check ----
@@ -220,17 +220,17 @@ export class Orchestrator {
       }
 
       // ---- Step 7: Missing Case Suggestion Agent ----
-      this.emit({ type: 'agent-activity', agent: 'Missing Case Suggestion', phase: 'thinking', message: 'Proposing new test scenarios...' });
+      this.emit({ type: 'agent-activity', agent: 'Gap Analyzer', phase: 'thinking', message: 'Proposing new test scenarios...' });
       try {
         const miss = await missingCaseAgent(report, lastProgram);
         this.emit({ type: 'missing-case-suggestions', iteration: iter, suggestions: miss.suggestions });
-        this.emit({ type: 'agent-activity', agent: 'Missing Case Suggestion', phase: 'done', message: `Proposed ${miss.suggestions.length} new scenarios`, detail: { suggestions: miss.suggestions } });
+        this.emit({ type: 'agent-activity', agent: 'Gap Analyzer', phase: 'done', message: `Proposed ${miss.suggestions.length} new scenarios`, detail: { suggestions: miss.suggestions } });
         // Feed back: the next iteration's targetScenarios come from the suggestions
         if (miss.suggestions.length > 0) {
           config.initialScenarios = miss.suggestions.map(s => s.scenario);
         }
       } catch (e: any) {
-        this.emit({ type: 'agent-activity', agent: 'Missing Case Suggestion', phase: 'done', message: `Agent error: ${e.message}` });
+        this.emit({ type: 'agent-activity', agent: 'Gap Analyzer', phase: 'done', message: `Error: ${e.message}` });
       }
 
       if (iter === config.maxIterations && !simLoopEnded) {
@@ -267,18 +267,18 @@ export class Orchestrator {
       this.emit({ type: 'formal-start', module: moduleName });
 
       // P1: Property Generation Agent (with internal retry via llmChat)
-      this.emit({ type: 'agent-activity', agent: 'Property Generation', phase: 'thinking', message: `Generating formal properties for ${moduleName}...` });
+      this.emit({ type: 'agent-activity', agent: 'Property Synthesizer', phase: 'thinking', message: `Generating formal properties for ${moduleName}...` });
       let propResult;
       try {
         propResult = await propertyGenerationAgent(mod);
       } catch (e: any) {
-        this.emit({ type: 'agent-activity', agent: 'Property Generation', phase: 'done', message: `Agent error: ${e.message}` });
+        this.emit({ type: 'agent-activity', agent: 'Property Synthesizer', phase: 'done', message: `Error: ${e.message}` });
         // Emit an empty formal-end so the dashboard knows this module is done
         this.emit({ type: 'formal-end', module: moduleName, summary: { proof: 0, counterexample: 0, errors: 0 } });
         continue;
       }
       this.emit({ type: 'formal-properties-generated', module: moduleName, properties: propResult.properties });
-      this.emit({ type: 'agent-activity', agent: 'Property Generation', phase: 'done', message: `Generated ${propResult.properties.length} properties`, detail: { properties: propResult.properties } });
+      this.emit({ type: 'agent-activity', agent: 'Property Synthesizer', phase: 'done', message: `Generated ${propResult.properties.length} properties`, detail: { properties: propResult.properties } });
 
       // P2: Parse + check each property
       let proof = 0, counterex = 0, errors = 0;

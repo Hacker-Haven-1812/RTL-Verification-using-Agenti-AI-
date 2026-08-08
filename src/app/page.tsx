@@ -35,14 +35,14 @@ export default function HomePage() {
     return () => clearInterval(t);
   }, []);
 
-  // Derive the active phase from the most recent agent activity (memoized, no setState)
+  // Derive the active phase from the most recent agent activity
   const activePhase = useMemo<'idle' | 'case-gen' | 'sim' | 'coverage' | 'missing-case' | 'formal'>(() => {
     const last = state.agentActivities[state.agentActivities.length - 1];
     if (!last || state.status !== 'running') return 'idle';
-    if (last.agent === 'Case Generation') return 'case-gen';
-    if (last.agent === 'Coverage Analysis') return 'coverage';
-    if (last.agent === 'Missing Case Suggestion') return 'missing-case';
-    if (last.agent === 'Property Generation') return 'formal';
+    if (last.agent === 'Test Generator') return 'case-gen';
+    if (last.agent === 'Coverage Analyzer') return 'coverage';
+    if (last.agent === 'Gap Analyzer') return 'missing-case';
+    if (last.agent === 'Property Synthesizer') return 'formal';
     if (last.agent === 'Formal Checker') return 'formal';
     if (last.agent === 'Assembler') return 'sim';
     return 'idle';
@@ -50,7 +50,7 @@ export default function HomePage() {
 
   // Detect if formal path is active
   const formalActive = useMemo(() => {
-    const formalAgents = state.agentActivities.filter(a => a.agent === 'Property Generation' || a.agent === 'Formal Checker');
+    const formalAgents = state.agentActivities.filter(a => a.agent === 'Property Synthesizer' || a.agent === 'Formal Checker');
     if (formalAgents.length === 0) return false;
     const last = formalAgents[formalAgents.length - 1];
     return last.phase === 'thinking';
@@ -75,7 +75,6 @@ export default function HomePage() {
       <DashboardHeader
         connected={wsConnected && state.errors.filter(e => e.message.includes('connection')).length === 0}
         status={state.status}
-        sessionId={state.sessionId}
       />
 
       <div className="flex-1 px-3 md:px-4 py-3 space-y-3 relative z-10">
@@ -148,17 +147,11 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Footer with attribution */}
-        <footer className="pt-4 pb-3 border-t border-border/40">
-          <div className="flex items-center justify-between gap-2 flex-wrap text-[10px] text-muted-foreground">
-            <div className="flex items-center gap-3 flex-wrap">
-              <span className="font-mono">VLSID 2026 · 39th Intl. Conf. on VLSI Design</span>
-              <span>·</span>
-              <span>Real RV32I simulator + LLM agents · No hardcoded tests</span>
-            </div>
-            <div className="flex items-center gap-2 font-mono">
-              <span>open-source: Verilator · Icarus · SymbiYosys · CrewAI · LangChain · Cocotb · Gemma · PicoRV32</span>
-            </div>
+        {/* Minimal footer */}
+        <footer className="pt-3 pb-2 border-t border-border/40">
+          <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
+            <span className="font-mono">RV32I · RV32I base ISA · 32 registers · 64 KiB memory</span>
+            <span className="font-mono">closed-loop verification · coverage-driven · formal-augmented</span>
           </div>
         </footer>
       </div>

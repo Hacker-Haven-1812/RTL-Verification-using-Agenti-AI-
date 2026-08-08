@@ -9,9 +9,9 @@ interface Props {
 }
 
 const HAZARD_BADGE: Record<string, string> = {
-  RAW: 'border-amber-500/40 text-amber-400 bg-amber-500/5',
-  CONTROL: 'border-cyan-500/40 text-cyan-400 bg-cyan-500/5',
-  'RAW+CONTROL': 'border-rose-500/40 text-rose-400 bg-rose-500/5',
+  RAW: 'border-primary/40 text-primary bg-primary/5',
+  CONTROL: 'border-primary/40 text-primary bg-primary/5',
+  'RAW+CONTROL': 'border-destructive/40 text-destructive bg-destructive/5',
   NONE: '',
 };
 
@@ -49,11 +49,11 @@ export function InstructionTracePanel({ trace }: Props) {
                 {trace.map((e, i) => (
                   <div
                     key={i}
-                    className={`fade-in-up grid grid-cols-[3rem_5rem_7rem_1fr_8rem] gap-2 px-3 py-0.5 border-b border-border/20 hover:bg-muted/30 ${i % 2 === 0 ? 'bg-card/30' : ''}`}
+                    className={`fade-in grid grid-cols-[3rem_5rem_7rem_1fr_8rem] gap-2 px-3 py-0.5 border-b border-border/20 hover:bg-muted/30 ${i % 2 === 0 ? 'bg-card/30' : ''}`}
                   >
                     <div className="text-muted-foreground tabular-nums">{e.cycle}</div>
-                    <div className="text-cyan-400/80 tabular-nums">{fmtHex(e.pc)}</div>
-                    <div className="text-emerald-400 truncate">
+                    <div className="text-primary/80 tabular-nums">{fmtHex(e.pc)}</div>
+                    <div className="text-primary truncate">
                       {e.mnemonic.split(' ')[0]}
                       {e.mnemonic.includes(' ') && (
                         <span className="text-muted-foreground ml-1">{e.mnemonic.split(' ').slice(1).join(' ')}</span>
@@ -62,33 +62,33 @@ export function InstructionTracePanel({ trace }: Props) {
                     <div className="text-muted-foreground truncate">
                       {e.rs1 !== undefined && (
                         <span className="mr-2">
-                          <span className="text-slate-400">x{e.rs1}</span>
-                          <span className="text-slate-500">=</span>
-                          <span className="text-slate-300">{e.rs1Val ?? 0}</span>
+                          <span className="text-muted-foreground">x{e.rs1}</span>
+                          <span className="text-muted-foreground/60">=</span>
+                          <span className="text-foreground/80">{e.rs1Val ?? 0}</span>
                         </span>
                       )}
                       {e.rs2 !== undefined && (
                         <span className="mr-2">
-                          <span className="text-slate-400">x{e.rs2}</span>
-                          <span className="text-slate-500">=</span>
-                          <span className="text-slate-300">{e.rs2Val ?? 0}</span>
+                          <span className="text-muted-foreground">x{e.rs2}</span>
+                          <span className="text-muted-foreground/60">=</span>
+                          <span className="text-foreground/80">{e.rs2Val ?? 0}</span>
                         </span>
                       )}
                       {e.rd !== undefined && (
                         <span>
-                          <span className="text-slate-500">→</span>
-                          <span className="text-emerald-400/80"> x{e.rd}</span>
-                          <span className="text-slate-500">=</span>
-                          <span className="text-emerald-300">{e.rdVal ?? 0}</span>
+                          <span className="text-muted-foreground/60">→</span>
+                          <span className="text-primary/80"> x{e.rd}</span>
+                          <span className="text-muted-foreground/60">=</span>
+                          <span className="text-primary/80">{e.rdVal ?? 0}</span>
                         </span>
                       )}
                       {e.memRead && (
-                        <span className="ml-2 text-cyan-400/70">
+                        <span className="ml-2 text-primary/70">
                           R[{fmtHex(e.memRead.addr, 3)}]={e.memRead.value}
                         </span>
                       )}
                       {e.memWrite && (
-                        <span className="ml-2 text-amber-400/70">
+                        <span className="ml-2 text-primary/70">
                           W[{fmtHex(e.memWrite.addr, 3)}]={e.memWrite.value}
                         </span>
                       )}

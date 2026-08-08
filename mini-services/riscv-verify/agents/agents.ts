@@ -49,10 +49,10 @@ async function getZai() {
 //   - A global mutex serializes all LLM calls so we never fire two at once.
 //   - A minimum inter-call delay spaces out successive calls.
 
-const MIN_CALL_INTERVAL_MS = 2500;       // ≥2.5s between LLM calls (avoids 429)
-const MAX_RETRIES = 6;
-const BASE_BACKOFF_MS = 3000;             // start at 3s, double each retry
-const MAX_BACKOFF_MS = 60_000;            // cap at 60s
+const MIN_CALL_INTERVAL_MS = 1500;       // ≥1.5s between LLM calls
+const MAX_RETRIES = 2;                   // fall back to deterministic fast
+const BASE_BACKOFF_MS = 1500;             // start at 1.5s
+const MAX_BACKOFF_MS = 8_000;            // cap at 8s
 
 let _lastCallTime = 0;
 let _llmMutex: Promise<any> = Promise.resolve();

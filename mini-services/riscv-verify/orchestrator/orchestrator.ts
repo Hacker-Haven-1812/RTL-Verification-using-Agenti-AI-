@@ -25,6 +25,7 @@
 import { RV32ICore, MEM_SIZE } from '../rv32i/core.js';
 import { assemble } from '../rv32i/assembler.js';
 import { analyzeCoverage, CoverageReport } from '../rv32i/coverage.js';
+import { generateFallbackProgram, generateBroadProgram } from '../rv32i/fallback-generator.js';
 import {
   caseGenerationAgent,
   coverageAnalysisAgent,
@@ -93,12 +94,14 @@ export class Orchestrator {
     let simLoopEnded = false;
 
     // Track CUMULATIVE coverage across all iterations — this is the key fix.
-    // Without this, the Test Generator only sees the last program and tends to
-    // regenerate similar code, so coverage stalls. With cumulative tracking,
-    // each iteration knows exactly which instructions have already been hit
-    // and which are still missing, so it can target the gaps.
     const cumulativeHitInstructions = new Set<string>();
     const coverageHistory: { iteration: number; overall: number }[] = [];
+    // Track max of each coverage dimension across iterations
+    let maxBranchRatio = 0;
+    let maxRegisterRatio = 0;
+    let maxHazardRatio = 0;
+    let maxFunctionalRatio = 0;
+    let maxMemBytes = 0;
 
     for (let iter = 1; iter <= config.maxIterations; iter++) {
       if (this.aborted) break;
@@ -132,7 +135,8 @@ export class Orchestrator {
       const missingInstructions = allInstructions.filter(m => !cumulativeHitInstructions.has(m));
 
       let genResult: any = null;
-      const MAX_CASEGEN_RETRIES = 3;
+      let usedFallback = false;
+      const MAX_CASEGEN_RETRIES = 2;
       for (let attempt = 1; attempt <= MAX_CASEGEN_RETRIES && !this.aborted; attempt++) {
         this.emit({ type: 'agent-activity', agent: 'Test Generator', phase: 'thinking', message: `Generating test program for iteration ${iter}${attempt > 1 ? ` (attempt ${attempt}/${MAX_CASEGEN_RETRIES})` : ''}...` });
         try {
@@ -153,22 +157,38 @@ export class Orchestrator {
           break; // success
         } catch (e: any) {
           const msg = e?.message ?? String(e);
-          this.emit({ type: 'agent-activity', agent: 'Test Generator', phase: 'done', message: `Attempt ${attempt} failed: ${msg.slice(0, 100)}` });
+          const isRateLimit = msg.includes('429') || msg.toLowerCase().includes('too many requests');
+          this.emit({ type: 'agent-activity', agent: 'Test Generator', phase: 'done', message: `Attempt ${attempt} failed: ${msg.slice(0, 80)}` });
+          // If rate-limited, skip remaining retries and go straight to fallback
+          if (isRateLimit) {
+            this.emit({ type: 'agent-activity', agent: 'Test Generator', phase: 'done', message: `LLM rate-limited — switching to deterministic fallback` });
+            break;
+          }
           if (attempt < MAX_CASEGEN_RETRIES) {
             await new Promise(r => setTimeout(r, 1500 * attempt));
-          } else {
-            this.emit({ type: 'error', message: `Test Generator failed after ${MAX_CASEGEN_RETRIES} attempts: ${msg}`, where: `iter-${iter}-casegen` });
-            genResult = null;
           }
         }
       }
+
+      // If LLM failed (rate-limited or errored), use the deterministic fallback
       if (!genResult) {
-        continue;
+        console.log(`[orchestrator] iter ${iter}: using deterministic fallback (missing=${missingInstructions.length})`);
+        this.emit({ type: 'agent-activity', agent: 'Test Generator', phase: 'done', message: `Using deterministic fallback targeting ${missingInstructions.length} missing instructions` });
+        const fallbackProgram = (iter === 1 && missingInstructions.length === 0)
+          ? generateBroadProgram()
+          : generateFallbackProgram(missingInstructions, iter);
+        genResult = {
+          program: fallbackProgram,
+          rationale: `Deterministic fallback program targeting ${missingInstructions.length} missing instructions`,
+          targets: missingInstructions.slice(0, 10),
+        };
+        usedFallback = true;
       }
-      this.emit({ type: 'agent-activity', agent: 'Test Generator', phase: 'done', message: `Generated ${genResult.program.split('\n').length} lines of assembly`, detail: { targets: genResult.targets, rationale: genResult.rationale } });
+      this.emit({ type: 'agent-activity', agent: 'Test Generator', phase: 'done', message: `Generated ${genResult.program.split('\n').length} lines of assembly${usedFallback ? ' (fallback)' : ''}`, detail: { targets: genResult.targets, rationale: genResult.rationale, fallback: usedFallback } });
 
       // ---- Step 2: Assemble ----
       const asm = assemble(genResult.program);
+      console.log(`[orchestrator] iter ${iter}: assembled ${asm.instructionCount} instrs, ${asm.errors.length} errors, ${asm.bytes.length} bytes`);
       this.emit({
         type: 'program-generated',
         iteration: iter,
@@ -221,15 +241,29 @@ export class Orchestrator {
       lastReport = report;
       lastProgram = genResult.program;
 
-      // Accumulate hit instructions into the cumulative set — this is what
-      // gets passed to the Test Generator on the next iteration so it knows
-      // which instructions to avoid repeating and which to target.
+      // Accumulate hit instructions into the cumulative set
       for (const m of report.instructionCoverage.hitMnemonicSet) {
         cumulativeHitInstructions.add(m);
       }
-      coverageHistory.push({ iteration: iter, overall: report.overallCoverage });
+      // Track max of each dimension across iterations
+      maxBranchRatio = Math.max(maxBranchRatio, report.branchCoverage.ratio);
+      maxRegisterRatio = Math.max(maxRegisterRatio, report.registerCoverage.ratio);
+      maxHazardRatio = Math.max(maxHazardRatio, report.hazardCoverage.ratio);
+      maxFunctionalRatio = Math.max(maxFunctionalRatio, report.functionalCoverage.ratio);
+      maxMemBytes = Math.max(maxMemBytes, report.memoryCoverage.bytesTouched);
 
-      // ---- Step 5: Coverage Analysis Agent ----
+      // Compute CUMULATIVE overall coverage (what the user actually cares about)
+      const cumulativeInstrRatio = cumulativeHitInstructions.size / report.instructionCoverage.total;
+      const cumulativeOverall =
+        cumulativeInstrRatio * 0.30 +
+        maxBranchRatio * 0.20 +
+        maxRegisterRatio * 0.10 +
+        maxHazardRatio * 0.10 +
+        Math.min(1, maxMemBytes / 256) * 0.10 +
+        maxFunctionalRatio * 0.20;
+      coverageHistory.push({ iteration: iter, overall: cumulativeOverall });
+
+      // ---- Step 5: Coverage Analysis Agent (skip if rate-limited) ----
       this.emit({ type: 'agent-activity', agent: 'Coverage Analyzer', phase: 'thinking', message: 'Summarizing coverage report...' });
       try {
         const analysis = await coverageAnalysisAgent(report);
@@ -237,32 +271,31 @@ export class Orchestrator {
         lastAnalysis = analysis;
         this.emit({ type: 'agent-activity', agent: 'Coverage Analyzer', phase: 'done', message: analysis.summary || 'Analysis complete' });
       } catch (e: any) {
-        this.emit({ type: 'agent-activity', agent: 'Coverage Analyzer', phase: 'done', message: `Error: ${e.message}` });
+        this.emit({ type: 'agent-activity', agent: 'Coverage Analyzer', phase: 'done', message: `Skipped (LLM unavailable) — using deterministic report` });
       }
 
-      // ---- Step 6: Goal check ----
-      if (report.overallCoverage >= config.coverageGoal) {
-        this.emit({ type: 'sim-loop-end', reason: 'goal-met', finalCoverage: report.overallCoverage });
+      // ---- Step 6: Goal check (use CUMULATIVE coverage) ----
+      if (cumulativeOverall >= config.coverageGoal) {
+        this.emit({ type: 'sim-loop-end', reason: 'goal-met', finalCoverage: cumulativeOverall });
         simLoopEnded = true;
         break;
       }
 
-      // ---- Step 7: Missing Case Suggestion Agent ----
+      // ---- Step 7: Gap Analyzer (skip if rate-limited) ----
       this.emit({ type: 'agent-activity', agent: 'Gap Analyzer', phase: 'thinking', message: 'Proposing new test scenarios...' });
       try {
         const miss = await missingCaseAgent(report, lastProgram);
         this.emit({ type: 'missing-case-suggestions', iteration: iter, suggestions: miss.suggestions });
         this.emit({ type: 'agent-activity', agent: 'Gap Analyzer', phase: 'done', message: `Proposed ${miss.suggestions.length} new scenarios`, detail: { suggestions: miss.suggestions } });
-        // Feed back: the next iteration's targetScenarios come from the suggestions
         if (miss.suggestions.length > 0) {
           config.initialScenarios = miss.suggestions.map(s => s.scenario);
         }
       } catch (e: any) {
-        this.emit({ type: 'agent-activity', agent: 'Gap Analyzer', phase: 'done', message: `Error: ${e.message}` });
+        this.emit({ type: 'agent-activity', agent: 'Gap Analyzer', phase: 'done', message: `Skipped (LLM unavailable) — fallback targets ${allInstructions.length - cumulativeHitInstructions.size} missing instructions` });
       }
 
       if (iter === config.maxIterations && !simLoopEnded) {
-        this.emit({ type: 'sim-loop-end', reason: 'max-iterations', finalCoverage: report.overallCoverage });
+        this.emit({ type: 'sim-loop-end', reason: 'max-iterations', finalCoverage: cumulativeOverall });
         simLoopEnded = true;
       }
     }

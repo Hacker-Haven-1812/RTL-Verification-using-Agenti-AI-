@@ -37,16 +37,16 @@ export function FormalVerificationPanel({ formalResults }: Props) {
             Formal Verification Path
           </CardTitle>
           <div className="flex items-center gap-1.5">
-            <Badge variant="outline" className="text-[10px] border-primary/40 text-primary bg-primary/5">
+            <Badge variant="outline" className="text-[10px] border-emerald-500/40 text-emerald-400 bg-emerald-500/5">
               <CheckCircle2 className="h-2.5 w-2.5 mr-1" />
               {totalProof} proof
             </Badge>
-            <Badge variant="outline" className="text-[10px] border-destructive/40 text-destructive bg-destructive/5">
+            <Badge variant="outline" className="text-[10px] border-rose-500/40 text-rose-400 bg-rose-500/5">
               <XCircle className="h-2.5 w-2.5 mr-1" />
               {totalCEX} cex
             </Badge>
             {totalErr > 0 && (
-              <Badge variant="outline" className="text-[10px] border-primary/40 text-primary bg-primary/5">
+              <Badge variant="outline" className="text-[10px] border-emerald-500/40 text-emerald-400 bg-emerald-500/5">
                 <AlertTriangle className="h-2.5 w-2.5 mr-1" />
                 {totalErr} err
               </Badge>

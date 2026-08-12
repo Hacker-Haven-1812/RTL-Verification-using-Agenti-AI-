@@ -72,8 +72,8 @@ export function ControlPanel({ status, onStart, onAbort, onReset, availableModul
           <Badge
             variant="outline"
             className={`text-[10px] ${
-              status === 'running' ? 'border-primary/40 text-primary bg-primary/5' :
-              status === 'completed' ? 'border-primary/30 text-primary/80' :
+              status === 'running' ? 'border-fuchsia-500/40 text-fuchsia-400 bg-fuchsia-500/5' :
+              status === 'completed' ? 'border-cyan-500/40 text-cyan-400 bg-cyan-500/5' :
               status === 'error' ? 'border-destructive/40 text-destructive bg-destructive/5' :
               'border-border text-muted-foreground'
             }`}
@@ -104,7 +104,7 @@ export function ControlPanel({ status, onStart, onAbort, onReset, availableModul
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <Label className="text-xs">Max Iterations</Label>
-            <span className="text-xs font-mono tabular-nums text-primary">{maxIterations}</span>
+            <span className="text-xs font-mono tabular-nums text-cyan-400">{maxIterations}</span>
           </div>
           <Slider
             value={[maxIterations]}
@@ -120,7 +120,7 @@ export function ControlPanel({ status, onStart, onAbort, onReset, availableModul
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <Label className="text-xs">Max Cycles / Run</Label>
-            <span className="text-xs font-mono tabular-nums text-primary">{maxCycles}</span>
+            <span className="text-xs font-mono tabular-nums text-amber-400">{maxCycles}</span>
           </div>
           <Slider
             value={[maxCycles]}
@@ -143,7 +143,7 @@ export function ControlPanel({ status, onStart, onAbort, onReset, availableModul
                 disabled={isRunning}
                 className={`text-[10px] font-mono px-2 py-0.5 rounded border transition-colors ${
                   targetModules.includes(m)
-                    ? 'border-primary/40 text-primary bg-primary/5'
+                    ? 'border-fuchsia-500/40 text-fuchsia-400 bg-fuchsia-500/5'
                     : 'border-border text-muted-foreground bg-card/50 hover:bg-muted/50'
                 } ${isRunning ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
@@ -171,7 +171,7 @@ export function ControlPanel({ status, onStart, onAbort, onReset, availableModul
                   disabled={isRunning}
                   className={`text-[9px] font-mono px-1.5 py-0.5 rounded border transition-colors ${
                     selectedSeeds.includes(s)
-                      ? 'border-primary/40 text-primary bg-primary/5'
+                      ? 'border-fuchsia-500/40 text-fuchsia-400 bg-fuchsia-500/5'
                       : 'border-border text-muted-foreground bg-card/50 hover:bg-muted/50'
                   } ${isRunning ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
@@ -220,7 +220,7 @@ export function ControlPanel({ status, onStart, onAbort, onReset, availableModul
         {}
         <div className="flex gap-2 pt-1">
           {!isRunning ? (
-            <Button onClick={handleStart} className="flex-1">
+            <Button onClick={handleStart} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white">
               <Play className="h-3.5 w-3.5 mr-1.5" />
               Start Verification
             </Button>

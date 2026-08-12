@@ -35,7 +35,7 @@ export function CoverageAnalysisPanel({ analysis }: Props) {
               </div>
             ) : (
               <>
-                <div className="rounded-md border border-primary/30 bg-primary/5 p-2">
+                <div className="rounded-md border border-cyan-500/30 bg-cyan-500/5 p-2">
                   <div className="text-[9px] uppercase tracking-wider text-primary mb-1">Summary</div>
                   <div className="text-xs text-foreground">{analysis.summary}</div>
                 </div>

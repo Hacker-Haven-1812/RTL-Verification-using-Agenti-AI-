@@ -66,7 +66,7 @@ export function CustomInputPanel({ isRunning, onRunProgram, onCheckProperty }: P
       <CardHeader className="pb-2 flex-shrink-0">
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <FileCode2 className="h-4 w-4 text-primary" />
+            <FileCode2 className="h-4 w-4 text-emerald-400" />
             Manual Input
           </CardTitle>
           <TooltipProvider>
@@ -161,7 +161,7 @@ export function CustomInputPanel({ isRunning, onRunProgram, onCheckProperty }: P
                     disabled={isRunning}
                     className={`text-[10px] font-mono px-2 py-0.5 rounded border transition-colors ${
                       moduleName === m
-                        ? 'border-primary/40 text-primary bg-primary/5'
+                        ? 'border-primary/40 text-emerald-400 bg-primary/5'
                         : 'border-border text-muted-foreground bg-card/50 hover:bg-muted/50'
                     } ${isRunning ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >

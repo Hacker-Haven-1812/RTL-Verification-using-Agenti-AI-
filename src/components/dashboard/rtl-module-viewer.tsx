@@ -105,7 +105,7 @@ export function RtlModuleViewer({ activeModules }: Props) {
                 onClick={() => setSelected(m.name)}
                 className={`text-[10px] font-mono px-2 py-0.5 rounded border transition-colors ${
                   selected === m.name
-                    ? 'border-primary/40 text-primary bg-primary/5'
+                    ? 'border-emerald-500/40 text-emerald-400 bg-emerald-500/5'
                     : 'border-border text-muted-foreground hover:bg-muted/50'
                 }`}
               >

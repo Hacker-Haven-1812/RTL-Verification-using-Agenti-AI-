@@ -30,7 +30,7 @@ export function DashboardHeader({ connected, status }: Props) {
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-3 flex-wrap">
           <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground font-mono">
             <span className={`h-1.5 w-1.5 rounded-full ${connected ? 'bg-emerald-400' : 'bg-rose-400'}`} />
             {connected ? 'ws connected' : 'ws offline'}
@@ -38,6 +38,13 @@ export function DashboardHeader({ connected, status }: Props) {
           <span className="text-[10px] text-muted-foreground font-mono tabular-nums">
             RV32I · 39 instructions
           </span>
+          <a href="https://portfolio-sigma-five-l53muw8xfb.vercel.app/" target="_blank" rel="noopener noreferrer" className="text-[11px] text-emerald-400 hover:text-emerald-300 transition-colors font-medium">
+            Portfolio
+          </a>
+          <span className="text-muted-foreground/30 text-[10px]">·</span>
+          <a href="https://www.linkedin.com/in/ankush-kumar-jaiswal-3927021b1/" target="_blank" rel="noopener noreferrer" className="text-[11px] text-cyan-400 hover:text-cyan-300 transition-colors font-medium">
+            LinkedIn
+          </a>
         </div>
       </div>
     </header>

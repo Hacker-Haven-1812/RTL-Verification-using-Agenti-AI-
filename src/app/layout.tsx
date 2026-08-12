@@ -24,6 +24,10 @@ export const metadata: Metadata = {
     "Formal Verification",
     "RV32I",
   ],
+  icons: {
+    icon: '/favicon.svg',
+    shortcut: '/favicon.svg',
+  },
 };
 
 export default function RootLayout({

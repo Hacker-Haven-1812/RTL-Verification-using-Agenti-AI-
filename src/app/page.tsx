@@ -149,9 +149,19 @@ export default function HomePage() {
 
         {}
         <footer className="pt-3 pb-2 border-t border-border/40">
-          <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
-            <span className="font-mono">RV32I · RV32I base ISA · 32 registers · 64 KiB memory</span>
-            <span className="font-mono">closed-loop verification · coverage-driven · formal-augmented</span>
+          <div className="flex items-center justify-between gap-2 flex-wrap text-[10px] text-muted-foreground">
+            <span className="font-mono">RV32I · 39 instructions · 32 registers · 64 KiB memory</span>
+            <div className="flex items-center gap-3">
+              <a href="https://portfolio-sigma-five-l53muw8xfb.vercel.app/" target="_blank" rel="noopener noreferrer" className="text-emerald-400 hover:text-emerald-300 transition-colors">
+                Portfolio
+              </a>
+              <span className="text-muted-foreground/40">·</span>
+              <a href="https://www.linkedin.com/in/ankush-kumar-jaiswal-3927021b1/" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:text-cyan-300 transition-colors">
+                LinkedIn
+              </a>
+              <span className="text-muted-foreground/40">·</span>
+              <span>© {new Date().getFullYear()} Ankush Kumar Jaiswal</span>
+            </div>
           </div>
         </footer>
       </div>

@@ -1,13 +1,31 @@
 
 
-import ZAI from 'z-ai-web-dev-sdk';
+import GeneratorSDK from 'z-ai-web-dev-sdk';
 import type { CoverageReport } from '../rv32i/coverage.js';
 import type { RtlModule } from '../rtl/modules.js';
+import { existsSync } from 'fs';
+import { join } from 'path';
 
-let _zai: any = null;
-async function getZai() {
-  if (!_zai) _zai = await ZAI.create();
-  return _zai;
+let _generator: any = null;
+let _generatorAvailable: boolean | null = null;
+
+export function isGeneratorAvailable(): boolean {
+  if (_generatorAvailable !== null) return _generatorAvailable;
+  const homeConfig = join(process.env.HOME || '/root', '.z-ai-config');
+  const cwdConfig = join(process.cwd(), '.z-ai-config');
+  _generatorAvailable = existsSync(homeConfig) || existsSync(cwdConfig);
+  if (!_generatorAvailable) {
+    console.log('[agents] Generator SDK config not found — using deterministic fallback');
+  }
+  return _generatorAvailable;
+}
+
+async function getGenerator() {
+  if (!isGeneratorAvailable()) {
+    throw new Error('Generator SDK not configured');
+  }
+  if (!_generator) _generator = await GeneratorSDK.create();
+  return _generator;
 }
 
 
@@ -49,11 +67,11 @@ async function llmChat(messages: { role: string; content: string }[], opts: { te
     }
     _lastCallTime = Date.now();
 
-    const zai = await getZai();
+    const generator = await getGenerator();
     let lastError: any = null;
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
-        const resp = await zai.chat.completions.create({
+        const resp = await generator.chat.completions.create({
           messages,
           temperature: opts.temperature ?? 0.5,
           max_tokens: opts.max_tokens ?? 1200,
@@ -67,7 +85,7 @@ async function llmChat(messages: { role: string; content: string }[], opts: { te
         if (is429 || is5xx) {
 
           const backoff = Math.min(MAX_BACKOFF_MS, BASE_BACKOFF_MS * Math.pow(2, attempt)) + Math.random() * 1000;
-          console.error(`[agents] LLM call failed (attempt ${attempt + 1}/${MAX_RETRIES}): ${msg.slice(0, 100)} — retrying in ${(backoff / 1000).toFixed(1)}s`);
+          console.error(`[generator] call failed (attempt ${attempt + 1}/${MAX_RETRIES}): ${msg.slice(0, 100)} — retrying in ${(backoff / 1000).toFixed(1)}s`);
           await sleep(backoff);
 
           _lastCallTime = Date.now();
@@ -77,7 +95,7 @@ async function llmChat(messages: { role: string; content: string }[], opts: { te
         throw e;
       }
     }
-    throw lastError ?? new Error('LLM call exhausted retries');
+    throw lastError ?? new Error('Generator call exhausted retries');
   } finally {
     release!();
   }

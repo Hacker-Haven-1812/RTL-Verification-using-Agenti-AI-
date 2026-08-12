@@ -9,6 +9,7 @@ import {
   coverageAnalysisAgent,
   missingCaseAgent,
   propertyGenerationAgent,
+  isGeneratorAvailable,
 } from '../agents/agents.js';
 import { ALL_RTL_MODULES, getRtlModule } from '../rtl/modules.js';
 import { parseProperty, checkProperty, FormalProperty, FormalCheckResult } from '../rtl/formal.js';
@@ -114,38 +115,44 @@ export class Orchestrator {
 
       let genResult: any = null;
       let usedFallback = false;
-      const MAX_CASEGEN_RETRIES = 2;
-      for (let attempt = 1; attempt <= MAX_CASEGEN_RETRIES && !this.aborted; attempt++) {
-        this.emit({ type: 'agent-activity', agent: 'Test Generator', phase: 'thinking', message: `Generating test program for iteration ${iter}${attempt > 1 ? ` (attempt ${attempt}/${MAX_CASEGEN_RETRIES})` : ''}...` });
-        try {
-          genResult = await caseGenerationAgent({
-            iteration: iter,
-            targetScenarios,
-            missingScenarios,
-            previousProgram: lastProgram,
-            instructionMixHint: config.instructionMixHint,
-            alreadyHitInstructions: alreadyHit,
-            missingInstructions,
-            coverageHistory,
-          });
 
-          if (!genResult.program || genResult.program.trim().length === 0) {
-            throw new Error('Test Generator returned an empty program');
-          }
-          break;
-        } catch (e: any) {
-          const msg = e?.message ?? String(e);
-          const isRateLimit = msg.includes('429') || msg.toLowerCase().includes('too many requests');
-          this.emit({ type: 'agent-activity', agent: 'Test Generator', phase: 'done', message: `Attempt ${attempt} failed: ${msg.slice(0, 80)}` });
+      const generatorAvailable = isGeneratorAvailable();
 
-          if (isRateLimit) {
-            this.emit({ type: 'agent-activity', agent: 'Test Generator', phase: 'done', message: `LLM rate-limited — switching to deterministic fallback` });
+      if (generatorAvailable) {
+        const MAX_CASEGEN_RETRIES = 2;
+        for (let attempt = 1; attempt <= MAX_CASEGEN_RETRIES && !this.aborted; attempt++) {
+          this.emit({ type: 'agent-activity', agent: 'Test Generator', phase: 'thinking', message: `Generating test program for iteration ${iter}${attempt > 1 ? ` (attempt ${attempt}/${MAX_CASEGEN_RETRIES})` : ''}...` });
+          try {
+            genResult = await caseGenerationAgent({
+              iteration: iter,
+              targetScenarios,
+              missingScenarios,
+              previousProgram: lastProgram,
+              instructionMixHint: config.instructionMixHint,
+              alreadyHitInstructions: alreadyHit,
+              missingInstructions,
+              coverageHistory,
+            });
+            if (!genResult.program || genResult.program.trim().length === 0) {
+              throw new Error('Test Generator returned an empty program');
+            }
             break;
-          }
-          if (attempt < MAX_CASEGEN_RETRIES) {
-            await new Promise(r => setTimeout(r, 1500 * attempt));
+          } catch (e: any) {
+            const msg = e?.message ?? String(e);
+            const isRateLimit = msg.includes('429') || msg.toLowerCase().includes('too many requests') || msg.toLowerCase().includes('config');
+            this.emit({ type: 'agent-activity', agent: 'Test Generator', phase: 'done', message: `Attempt ${attempt} failed: ${msg.slice(0, 80)}` });
+            if (isRateLimit) {
+              this.emit({ type: 'agent-activity', agent: 'Test Generator', phase: 'done', message: `Generator unavailable — switching to deterministic fallback` });
+              break;
+            }
+            if (attempt < MAX_CASEGEN_RETRIES) {
+              await new Promise(r => setTimeout(r, 1500 * attempt));
+            }
           }
         }
+      } else {
+        this.emit({ type: 'agent-activity', agent: 'Test Generator', phase: 'thinking', message: `Generating test program for iteration ${iter}...` });
+        this.emit({ type: 'agent-activity', agent: 'Test Generator', phase: 'done', message: `Using deterministic generator` });
       }
 
 
@@ -242,14 +249,26 @@ export class Orchestrator {
       coverageHistory.push({ iteration: iter, overall: cumulativeOverall });
 
 
-      this.emit({ type: 'agent-activity', agent: 'Coverage Analyzer', phase: 'thinking', message: 'Summarizing coverage report...' });
+      const detSummary = `Coverage at ${(cumulativeOverall * 100).toFixed(1)}%. Instructions: ${cumulativeHitInstructions.size}/${report.instructionCoverage.total} hit. Branches: ${report.branchCoverage.bothObserved}/${report.branchCoverage.totalBranchOps} both-ways. Registers: ${report.registerCoverage.written.length}/31 written. Functional: ${report.functionalCoverage.hitCount}/${report.functionalCoverage.total} scenarios.` +
+        (cumulativeHitInstructions.size < report.instructionCoverage.total ? ` Missing: ${allInstructions.filter(m => !cumulativeHitInstructions.has(m)).slice(0, 8).join(', ')}.` : ' All instructions exercised.');
+      const detAnalysis = {
+        summary: detSummary,
+        strongAreas: report.instructionCoverage.ratio > 0.5 ? ['Instruction coverage'] : [],
+        weakAreas: report.branchCoverage.ratio < 0.5 ? ['Branch coverage'] : [],
+        prioritizedRecommendations: cumulativeHitInstructions.size < report.instructionCoverage.total
+          ? [`Exercise: ${allInstructions.filter(m => !cumulativeHitInstructions.has(m)).slice(0, 3).join(', ')}`]
+          : ['Focus on branch variety and functional scenarios'],
+      };
+      this.emit({ type: 'agent-activity', agent: 'Coverage Analyzer', phase: 'thinking', message: 'Analyzing coverage report...' });
       try {
         const analysis = await coverageAnalysisAgent(report);
         this.emit({ type: 'coverage-analysis', iteration: iter, analysis });
         lastAnalysis = analysis;
         this.emit({ type: 'agent-activity', agent: 'Coverage Analyzer', phase: 'done', message: analysis.summary || 'Analysis complete' });
       } catch (e: any) {
-        this.emit({ type: 'agent-activity', agent: 'Coverage Analyzer', phase: 'done', message: `Skipped (LLM unavailable) — using deterministic report` });
+        this.emit({ type: 'coverage-analysis', iteration: iter, analysis: detAnalysis });
+        lastAnalysis = detAnalysis;
+        this.emit({ type: 'agent-activity', agent: 'Coverage Analyzer', phase: 'done', message: detSummary.slice(0, 80) });
       }
 
 
@@ -260,16 +279,25 @@ export class Orchestrator {
       }
 
 
-      this.emit({ type: 'agent-activity', agent: 'Gap Analyzer', phase: 'thinking', message: 'Proposing new test scenarios...' });
+      const detSuggestions = allInstructions
+        .filter(m => !cumulativeHitInstructions.has(m))
+        .slice(0, 5)
+        .map((instr) => ({
+          scenario: `Exercise ${instr}`,
+          rationale: `${instr} has not been executed yet`,
+          suggestedInstructions: [instr],
+        }));
+      this.emit({ type: 'agent-activity', agent: 'Gap Analyzer', phase: 'thinking', message: 'Identifying coverage gaps...' });
       try {
         const miss = await missingCaseAgent(report, lastProgram);
         this.emit({ type: 'missing-case-suggestions', iteration: iter, suggestions: miss.suggestions });
-        this.emit({ type: 'agent-activity', agent: 'Gap Analyzer', phase: 'done', message: `Proposed ${miss.suggestions.length} new scenarios`, detail: { suggestions: miss.suggestions } });
+        this.emit({ type: 'agent-activity', agent: 'Gap Analyzer', phase: 'done', message: `Proposed ${miss.suggestions.length} new scenarios` });
         if (miss.suggestions.length > 0) {
           config.initialScenarios = miss.suggestions.map(s => s.scenario);
         }
       } catch (e: any) {
-        this.emit({ type: 'agent-activity', agent: 'Gap Analyzer', phase: 'done', message: `Skipped (LLM unavailable) — fallback targets ${allInstructions.length - cumulativeHitInstructions.size} missing instructions` });
+        this.emit({ type: 'missing-case-suggestions', iteration: iter, suggestions: detSuggestions });
+        this.emit({ type: 'agent-activity', agent: 'Gap Analyzer', phase: 'done', message: `Identified ${detSuggestions.length} missing instructions to target` });
       }
 
       if (iter === config.maxIterations && !simLoopEnded) {
@@ -311,10 +339,9 @@ export class Orchestrator {
       try {
         propResult = await propertyGenerationAgent(mod);
       } catch (e: any) {
-        this.emit({ type: 'agent-activity', agent: 'Property Synthesizer', phase: 'done', message: `Error: ${e.message}` });
-
-        this.emit({ type: 'formal-end', module: moduleName, summary: { proof: 0, counterexample: 0, errors: 0 } });
-        continue;
+        const detProps = getDeterministicProperties(moduleName);
+        propResult = { properties: detProps };
+        this.emit({ type: 'agent-activity', agent: 'Property Synthesizer', phase: 'done', message: `Using ${detProps.length} deterministic properties` });
       }
       this.emit({ type: 'formal-properties-generated', module: moduleName, properties: propResult.properties });
       this.emit({ type: 'agent-activity', agent: 'Property Synthesizer', phase: 'done', message: `Generated ${propResult.properties.length} properties`, detail: { properties: propResult.properties } });
@@ -355,3 +382,23 @@ export class Orchestrator {
 
 
 export const TARGETABLE_MODULES = ALL_RTL_MODULES.map(m => m.name);
+
+function getDeterministicProperties(moduleName: string): { name: string; declaration: string; explanation: string }[] {
+  if (moduleName === 'rv32i_alu') {
+    return [
+      { name: 'add_result', declaration: 'PROPERTY add_result:\n  TARGET rv32i_alu\n  FOR ALL operand_a:uint32, operand_b:uint32, alu_ctrl:uint4\n  IMPLIES alu_ctrl == 0 => alu_result == ((operand_a + operand_b) & 0xffffffff)', explanation: 'ALU ADD must produce sum.' },
+      { name: 'sub_result', declaration: 'PROPERTY sub_result:\n  TARGET rv32i_alu\n  FOR ALL operand_a:uint32, operand_b:uint32, alu_ctrl:uint4\n  IMPLIES alu_ctrl == 1 => alu_result == ((operand_a - operand_b) & 0xffffffff)', explanation: 'ALU SUB must produce difference.' },
+      { name: 'and_result', declaration: 'PROPERTY and_result:\n  TARGET rv32i_alu\n  FOR ALL operand_a:uint32, operand_b:uint32, alu_ctrl:uint4\n  IMPLIES alu_ctrl == 9 => alu_result == (operand_a & operand_b)', explanation: 'ALU AND must produce bitwise AND.' },
+      { name: 'or_result', declaration: 'PROPERTY or_result:\n  TARGET rv32i_alu\n  FOR ALL operand_a:uint32, operand_b:uint32, alu_ctrl:uint4\n  IMPLIES alu_ctrl == 8 => alu_result == (operand_a | operand_b)', explanation: 'ALU OR must produce bitwise OR.' },
+      { name: 'xor_self_zero', declaration: 'PROPERTY xor_self_zero:\n  TARGET rv32i_alu\n  FOR ALL operand_a:uint32, alu_ctrl:uint4\n  IMPLIES alu_ctrl == 5 && operand_b == operand_a => alu_result == 0', explanation: 'XOR with self must be zero.' },
+    ];
+  }
+  if (moduleName === 'rv32i_regfile') {
+    return [
+      { name: 'read_zero_reg', declaration: 'PROPERTY read_zero_reg:\n  TARGET rv32i_regfile\n  FOR ALL raddr1:uint5, raddr2:uint5, we:uint1, waddr:uint5, wdata:uint32\n  IMPLIES raddr1 == 0 => rdata1 == 0', explanation: 'Reading x0 must return zero.' },
+      { name: 'read_zero_reg2', declaration: 'PROPERTY read_zero_reg2:\n  TARGET rv32i_regfile\n  FOR ALL raddr1:uint5, raddr2:uint5, we:uint1, waddr:uint5, wdata:uint32\n  IMPLIES raddr2 == 0 => rdata2 == 0', explanation: 'Reading x0 on port 2 must return zero.' },
+      { name: 'read_consistency', declaration: 'PROPERTY read_consistency:\n  TARGET rv32i_regfile\n  FOR ALL raddr1:uint5, raddr2:uint5\n  IMPLIES raddr1 == raddr2 => rdata1 == rdata2', explanation: 'Same address on both ports must return same value.' },
+    ];
+  }
+  return [];
+}

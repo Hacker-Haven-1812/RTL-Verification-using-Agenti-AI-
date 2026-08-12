@@ -228,14 +228,22 @@ export function useVerification(opts: UseVerificationOptions = {}) {
   }, [opts.onSessionEnded]);
 
   useEffect(() => {
-    const socket = io('/?XTransformPort=3003', {
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || '';
+    const isProduction = !!backendUrl;
+
+    const socketOpts = {
+      path: '/socket.io/',
       transports: ['websocket', 'polling'],
       forceNew: true,
       reconnection: true,
       reconnectionAttempts: 10,
       reconnectionDelay: 1500,
       timeout: 15000,
-    });
+    };
+
+    const socket = isProduction
+      ? io(backendUrl, socketOpts)
+      : io('http://localhost:3003', socketOpts);
     socketRef.current = socket;
 
     socket.on('connect', () => {

@@ -1,26 +1,4 @@
-/**
- * Closed-Loop Verification Orchestrator
- * --------------------------------------
- * Drives the full simulation loop + formal verification path described in the
- * VLSID 2026 design-track architecture diagram.
- *
- *   Simulation Loop (left):
- *     1. Case Generation Agent -> assembly program
- *     2. Assembler -> machine code
- *     3. RV32I Core -> execution trace
- *     4. Coverage Analyzer -> CoverageReport
- *     5. Coverage Analysis Agent -> natural-language summary
- *     6. If overallCoverage >= goal -> END
- *        else Missing Case Suggestion Agent -> suggestions
- *     7. Feed suggestions back to step 1, repeat
- *
- *   Formal Path (right, runs in parallel):
- *     P1. Property Generation Agent -> formal properties (DSL)
- *     P2. Property parser + checker -> Proof | Counterexample per property
- *
- * Every step emits real-time events via the orchestrator's emit() callback so
- * the WebSocket server can stream them to the dashboard.
- */
+
 
 import { RV32ICore, MEM_SIZE } from '../rv32i/core.js';
 import { assemble } from '../rv32i/assembler.js';
@@ -46,7 +24,7 @@ export type OrchestratorEvent =
   | { type: 'coverage-analysis'; iteration: number; analysis: any }
   | { type: 'missing-case-suggestions'; iteration: number; suggestions: any[] }
   | { type: 'sim-loop-end'; reason: 'goal-met' | 'max-iterations'; finalCoverage: number }
-  // Formal path events
+
   | { type: 'formal-start'; module: string }
   | { type: 'formal-properties-generated'; module: string; properties: { name: string; declaration: string; explanation: string }[] }
   | { type: 'formal-check-result'; module: string; result: FormalCheckResult }
@@ -56,11 +34,11 @@ export type OrchestratorEvent =
 
 export interface OrchestratorConfig {
   sessionId: string;
-  coverageGoal: number;       // 0..1, e.g. 0.85
-  maxIterations: number;      // sim loop iterations
-  maxCyclesPerRun: number;    // simulator cycle limit per program
-  targetModules: string[];    // modules to formally verify
-  initialScenarios: string[]; // optional seed scenarios for iteration 1
+  coverageGoal: number;
+  maxIterations: number;
+  maxCyclesPerRun: number;
+  targetModules: string[];
+  initialScenarios: string[];
   instructionMixHint?: string;
 }
 
@@ -78,25 +56,25 @@ export class Orchestrator {
     this.aborted = false;
     this.emit({ type: 'session-started', sessionId: config.sessionId, config });
 
-    // ----------------------------------------------------------------
-    // IMPORTANT: Run the simulation loop and the formal path SERIALLY.
-    // Running them in parallel caused the LLM API to return HTTP 429
-    // (Too Many Requests) because two agents fire calls at the same time.
-    // The llmChat() helper in agents.ts now serializes all calls through
-    // a global mutex, but we still keep the paths sequential here so the
-    // dashboard activity feed is readable.
-    // ----------------------------------------------------------------
 
-    // Run the simulation loop first (each iteration depends on the prior)
+
+
+
+
+
+
+
+
+
     let lastProgram: string | undefined;
     let lastReport: CoverageReport | undefined;
     let lastAnalysis: any = undefined;
     let simLoopEnded = false;
 
-    // Track CUMULATIVE coverage across all iterations — this is the key fix.
+
     const cumulativeHitInstructions = new Set<string>();
     const coverageHistory: { iteration: number; overall: number }[] = [];
-    // Track max of each coverage dimension across iterations
+
     let maxBranchRatio = 0;
     let maxRegisterRatio = 0;
     let maxHazardRatio = 0;
@@ -106,7 +84,7 @@ export class Orchestrator {
     for (let iter = 1; iter <= config.maxIterations; iter++) {
       if (this.aborted) break;
 
-      // Decide what to target this iteration
+
       let targetScenarios = config.initialScenarios;
       let missingScenarios: string[] | undefined;
       if (iter === 1) {
@@ -120,8 +98,8 @@ export class Orchestrator {
 
       this.emit({ type: 'sim-iteration-start', iteration: iter, targetScenarios });
 
-      // ---- Step 1: Test Generator (with retry) ----
-      // Pass cumulative hit/missing instruction lists so the agent targets gaps.
+
+
       const alreadyHit = [...cumulativeHitInstructions].sort();
       const allInstructions = [
         'LUI', 'AUIPC', 'JAL', 'JALR',
@@ -150,16 +128,16 @@ export class Orchestrator {
             missingInstructions,
             coverageHistory,
           });
-          // Validate: non-empty program
+
           if (!genResult.program || genResult.program.trim().length === 0) {
             throw new Error('Test Generator returned an empty program');
           }
-          break; // success
+          break;
         } catch (e: any) {
           const msg = e?.message ?? String(e);
           const isRateLimit = msg.includes('429') || msg.toLowerCase().includes('too many requests');
           this.emit({ type: 'agent-activity', agent: 'Test Generator', phase: 'done', message: `Attempt ${attempt} failed: ${msg.slice(0, 80)}` });
-          // If rate-limited, skip remaining retries and go straight to fallback
+
           if (isRateLimit) {
             this.emit({ type: 'agent-activity', agent: 'Test Generator', phase: 'done', message: `LLM rate-limited — switching to deterministic fallback` });
             break;
@@ -170,7 +148,7 @@ export class Orchestrator {
         }
       }
 
-      // If LLM failed (rate-limited or errored), use the deterministic fallback
+
       if (!genResult) {
         console.log(`[orchestrator] iter ${iter}: using deterministic fallback (missing=${missingInstructions.length})`);
         this.emit({ type: 'agent-activity', agent: 'Test Generator', phase: 'done', message: `Using deterministic fallback targeting ${missingInstructions.length} missing instructions` });
@@ -186,7 +164,7 @@ export class Orchestrator {
       }
       this.emit({ type: 'agent-activity', agent: 'Test Generator', phase: 'done', message: `Generated ${genResult.program.split('\n').length} lines of assembly${usedFallback ? ' (fallback)' : ''}`, detail: { targets: genResult.targets, rationale: genResult.rationale, fallback: usedFallback } });
 
-      // ---- Step 2: Assemble ----
+
       const asm = assemble(genResult.program);
       console.log(`[orchestrator] iter ${iter}: assembled ${asm.instructionCount} instrs, ${asm.errors.length} errors, ${asm.bytes.length} bytes`);
       this.emit({
@@ -200,7 +178,7 @@ export class Orchestrator {
       });
       if (asm.errors.length > 0) {
         this.emit({ type: 'agent-activity', agent: 'Assembler', phase: 'done', message: `Assembly had ${asm.errors.length} errors — skipping simulation`, detail: { errors: asm.errors } });
-        // Try next iteration anyway — the AI might fix it
+
         lastProgram = genResult.program;
         continue;
       }
@@ -209,22 +187,22 @@ export class Orchestrator {
         continue;
       }
 
-      // ---- Step 3: Simulate ----
+
       const mem = new Uint8Array(MEM_SIZE);
       mem.set(asm.bytes, 0);
       const core = new RV32ICore(mem, { maxCycles: config.maxCyclesPerRun, startPc: 0, trackHazards: true });
 
-      // Stream the first N cycles for the live trace view
+
       const STREAM_FIRST_N = 200;
       let streamed = 0;
       let lastStreamTime = 0;
       const runResult = core.run(config.maxCyclesPerRun);
-      // Note: we already ran the full sim — now emit a representative trace
-      // (we don't pause mid-execution for performance, but we emit the first
-      // 200 entries as if they were streamed)
+
+
+
       for (const e of runResult.trace.slice(0, STREAM_FIRST_N)) {
         if (this.aborted) break;
-        // Throttle: only emit at most 1 event per 5ms to avoid flooding
+
         const now = Date.now();
         if (now - lastStreamTime > 5 || streamed < 50) {
           this.emit({ type: 'simulation-progress', iteration: iter, cycle: e.cycle, pc: e.pc, mnemonic: e.mnemonic, entry: e });
@@ -235,24 +213,24 @@ export class Orchestrator {
 
       this.emit({ type: 'simulation-complete', iteration: iter, result: runResult });
 
-      // ---- Step 4: Coverage Analysis ----
+
       const report = analyzeCoverage(runResult.trace, runResult.cycles);
       this.emit({ type: 'coverage-update', iteration: iter, report });
       lastReport = report;
       lastProgram = genResult.program;
 
-      // Accumulate hit instructions into the cumulative set
+
       for (const m of report.instructionCoverage.hitMnemonicSet) {
         cumulativeHitInstructions.add(m);
       }
-      // Track max of each dimension across iterations
+
       maxBranchRatio = Math.max(maxBranchRatio, report.branchCoverage.ratio);
       maxRegisterRatio = Math.max(maxRegisterRatio, report.registerCoverage.ratio);
       maxHazardRatio = Math.max(maxHazardRatio, report.hazardCoverage.ratio);
       maxFunctionalRatio = Math.max(maxFunctionalRatio, report.functionalCoverage.ratio);
       maxMemBytes = Math.max(maxMemBytes, report.memoryCoverage.bytesTouched);
 
-      // Compute CUMULATIVE overall coverage (what the user actually cares about)
+
       const cumulativeInstrRatio = cumulativeHitInstructions.size / report.instructionCoverage.total;
       const cumulativeOverall =
         cumulativeInstrRatio * 0.30 +
@@ -263,7 +241,7 @@ export class Orchestrator {
         maxFunctionalRatio * 0.20;
       coverageHistory.push({ iteration: iter, overall: cumulativeOverall });
 
-      // ---- Step 5: Coverage Analysis Agent (skip if rate-limited) ----
+
       this.emit({ type: 'agent-activity', agent: 'Coverage Analyzer', phase: 'thinking', message: 'Summarizing coverage report...' });
       try {
         const analysis = await coverageAnalysisAgent(report);
@@ -274,14 +252,14 @@ export class Orchestrator {
         this.emit({ type: 'agent-activity', agent: 'Coverage Analyzer', phase: 'done', message: `Skipped (LLM unavailable) — using deterministic report` });
       }
 
-      // ---- Step 6: Goal check (use CUMULATIVE coverage) ----
+
       if (cumulativeOverall >= config.coverageGoal) {
         this.emit({ type: 'sim-loop-end', reason: 'goal-met', finalCoverage: cumulativeOverall });
         simLoopEnded = true;
         break;
       }
 
-      // ---- Step 7: Gap Analyzer (skip if rate-limited) ----
+
       this.emit({ type: 'agent-activity', agent: 'Gap Analyzer', phase: 'thinking', message: 'Proposing new test scenarios...' });
       try {
         const miss = await missingCaseAgent(report, lastProgram);
@@ -301,14 +279,14 @@ export class Orchestrator {
     }
 
     if (!simLoopEnded) {
-      // Loop exited early (e.g. all iterations failed). Emit a max-iterations end.
+
       this.emit({ type: 'sim-loop-end', reason: 'max-iterations', finalCoverage: lastReport?.overallCoverage ?? 0 });
     }
 
-    // ----------------------------------------------------------------
-    // Now run the formal verification path SERIALLY (after sim loop).
-    // This avoids hitting the LLM API with two concurrent agent calls.
-    // ----------------------------------------------------------------
+
+
+
+
     if (!this.aborted && config.targetModules.length > 0) {
       await this.runFormalPath(config);
     }
@@ -316,7 +294,7 @@ export class Orchestrator {
     this.emit({ type: 'session-ended', sessionId: config.sessionId, summary: { finalCoverage: lastReport?.overallCoverage ?? 0, iterations: config.maxIterations, lastAnalysis } });
   }
 
-  // ----------------- Formal Verification Path -----------------
+
   private async runFormalPath(config: OrchestratorConfig) {
     for (const moduleName of config.targetModules) {
       if (this.aborted) break;
@@ -327,21 +305,21 @@ export class Orchestrator {
       }
       this.emit({ type: 'formal-start', module: moduleName });
 
-      // P1: Property Generation Agent (with internal retry via llmChat)
+
       this.emit({ type: 'agent-activity', agent: 'Property Synthesizer', phase: 'thinking', message: `Generating formal properties for ${moduleName}...` });
       let propResult;
       try {
         propResult = await propertyGenerationAgent(mod);
       } catch (e: any) {
         this.emit({ type: 'agent-activity', agent: 'Property Synthesizer', phase: 'done', message: `Error: ${e.message}` });
-        // Emit an empty formal-end so the dashboard knows this module is done
+
         this.emit({ type: 'formal-end', module: moduleName, summary: { proof: 0, counterexample: 0, errors: 0 } });
         continue;
       }
       this.emit({ type: 'formal-properties-generated', module: moduleName, properties: propResult.properties });
       this.emit({ type: 'agent-activity', agent: 'Property Synthesizer', phase: 'done', message: `Generated ${propResult.properties.length} properties`, detail: { properties: propResult.properties } });
 
-      // P2: Parse + check each property
+
       let proof = 0, counterex = 0, errors = 0;
       for (const p of propResult.properties) {
         if (this.aborted) break;
@@ -375,5 +353,5 @@ export class Orchestrator {
   }
 }
 
-// Convenience: list of all targetable RTL modules (used by the dashboard)
+
 export const TARGETABLE_MODULES = ALL_RTL_MODULES.map(m => m.name);

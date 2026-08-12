@@ -98,7 +98,7 @@ export function CustomInputPanel({ isRunning, onRunProgram, onCheckProperty }: P
             </TabsTrigger>
           </TabsList>
 
-          {/* Assembly tab */}
+          {}
           <TabsContent value="program" className="flex-1 min-h-0 mt-0 flex flex-col">
             <div className="px-3 pt-2 pb-1 flex items-center justify-between gap-2 flex-wrap">
               <div className="text-[10px] text-muted-foreground">
@@ -149,7 +149,7 @@ export function CustomInputPanel({ isRunning, onRunProgram, onCheckProperty }: P
             </div>
           </TabsContent>
 
-          {/* Property tab */}
+          {}
           <TabsContent value="property" className="flex-1 min-h-0 mt-0 flex flex-col">
             <div className="px-3 pt-2 pb-1 flex items-center justify-between gap-2 flex-wrap">
               <div className="flex items-center gap-2">

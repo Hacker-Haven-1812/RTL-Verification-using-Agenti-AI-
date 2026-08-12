@@ -75,7 +75,7 @@ function reducer(state: VerificationState, action: Action): VerificationState {
             timestamp: Date.now(),
             iteration: state.currentIteration,
           };
-          // Cap activities at the most recent 200 to avoid memory blowup
+
           const activities = [...state.agentActivities, activity].slice(-200);
           return { ...state, agentActivities: activities };
         }
@@ -90,11 +90,11 @@ function reducer(state: VerificationState, action: Action): VerificationState {
               assemblerErrors: e.assemblerErrors,
               instructionCount: e.instructionCount,
             },
-            // Reset trace when a new program starts
+
             trace: [],
           };
         case 'simulation-progress':
-          // Cap trace at the most recent 500 entries
+
           return {
             ...state,
             trace: [...state.trace, e.entry].slice(-500),
@@ -103,15 +103,15 @@ function reducer(state: VerificationState, action: Action): VerificationState {
           return state;
         case 'coverage-update': {
           const r = e.report;
-          // Track cumulative hit instructions across ALL iterations
+
           const newHits = r.instructionCoverage.hitMnemonicSet.filter(
             m => !state.cumulativeHitInstructions.includes(m)
           );
           const cumulativeHit = [...state.cumulativeHitInstructions, ...newHits];
           const cumulativeInstructionCount = cumulativeHit.length;
 
-          // Recompute cumulative coverage: use the union of hit instructions
-          // and take the max of other metrics across iterations
+
+
           const cumulativeInstrRatio = cumulativeInstructionCount / r.instructionCoverage.total;
           const cumulativeOverall =
             cumulativeInstrRatio * 0.30 +
@@ -123,7 +123,7 @@ function reducer(state: VerificationState, action: Action): VerificationState {
 
           const hist = [...state.coverageHistory, {
             iteration: e.iteration,
-            overall: cumulativeOverall,  // show cumulative in sparkline
+            overall: cumulativeOverall,
             instruction: cumulativeInstrRatio,
             branch: Math.max(state.latestReport?.branchCoverage.ratio ?? 0, r.branchCoverage.ratio),
             register: Math.max(state.latestReport?.registerCoverage.ratio ?? 0, r.registerCoverage.ratio),
@@ -131,8 +131,8 @@ function reducer(state: VerificationState, action: Action): VerificationState {
             functional: Math.max(state.latestReport?.functionalCoverage.ratio ?? 0, r.functionalCoverage.ratio),
           }];
 
-          // Build a merged "cumulative report" for display: same as the latest
-          // report but with the cumulative instruction hit/miss sets
+
+
           const cumulativeReport = {
             ...r,
             overallCoverage: cumulativeOverall,
@@ -150,7 +150,7 @@ function reducer(state: VerificationState, action: Action): VerificationState {
           return {
             ...state,
             coverageHistory: hist,
-            latestReport: cumulativeReport,  // show cumulative in coverage panel
+            latestReport: cumulativeReport,
             cumulativeCoverage: cumulativeOverall,
             cumulativeHitInstructions: cumulativeHit,
             cumulativeInstructionCount,
@@ -161,7 +161,7 @@ function reducer(state: VerificationState, action: Action): VerificationState {
         case 'missing-case-suggestions':
           return { ...state, missingCaseSuggestions: e.suggestions };
         case 'sim-loop-end':
-          // Don't mark as completed yet — wait for session-ended so formal path can finish
+
           return { ...state, simLoopEndReason: e.reason };
         case 'formal-start':
           return {
@@ -239,7 +239,7 @@ export function useVerification(opts: UseVerificationOptions = {}) {
     socketRef.current = socket;
 
     socket.on('connect', () => {
-      // Connected — nothing to do until start-verification is emitted
+
     });
     socket.on('disconnect', () => {
       dispatch({ type: 'SOCKET_DISCONNECTED' });
@@ -273,14 +273,14 @@ export function useVerification(opts: UseVerificationOptions = {}) {
     socketRef.current?.emit('start-verification', fullConfig);
   }, []);
 
-  // NEW: Run a user-submitted custom RISC-V assembly program (no AI in the loop)
+
   const runCustomProgram = useCallback((program: string, maxCycles?: number) => {
     const sessionId = `custom-${Date.now()}`;
     dispatch({ type: 'RESET' });
-    // Use a minimal config so the dashboard shows "running"
+
     const config: OrchestratorConfig = {
       sessionId,
-      coverageGoal: 1.0,           // not used for custom runs
+      coverageGoal: 1.0,
       maxIterations: 1,
       maxCyclesPerRun: maxCycles ?? 1500,
       targetModules: [],
@@ -290,7 +290,7 @@ export function useVerification(opts: UseVerificationOptions = {}) {
     socketRef.current?.emit('run-custom-program', { sessionId, program, maxCycles: maxCycles ?? 1500 });
   }, []);
 
-  // NEW: Check a user-submitted custom formal property (no AI in the loop)
+
   const checkCustomProperty = useCallback((moduleName: string, declaration: string) => {
     const sessionId = `custom-prop-${Date.now()}`;
     dispatch({ type: 'RESET' });

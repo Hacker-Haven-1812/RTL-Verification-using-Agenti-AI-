@@ -1,26 +1,15 @@
-/**
- * REAL RTL Module Definitions
- * ----------------------------
- * These are the actual "designs under verification". They are written in a
- * Verilog-like pseudocode (preserved as strings so the user can inspect them
- * and the formal-verification agent can reason about them), AND a behavioral
- * TypeScript implementation that the formal checker uses to evaluate
- * LLM-generated properties.
- *
- * Nothing is mocked: the ALU and register file actually compute outputs, and
- * the property checker runs real property-based tests against them.
- */
+
 
 export interface RtlModule {
   name: string;
   description: string;
-  verilogSource: string; // human-readable Verilog (for display + LLM reasoning)
+  verilogSource: string;
   ports: { name: string; direction: 'input' | 'output'; width: number; description: string }[];
-  /** Behavioral model — actually computes the module's outputs in TS */
+
   behavior: (inputs: Record<string, number>) => Record<string, number>;
 }
 
-// ----------------- ALU Module -----------------
+
 export const ALU_MODULE: RtlModule = {
   name: 'rv32i_alu',
   description:
@@ -34,7 +23,6 @@ export const ALU_MODULE: RtlModule = {
     output reg [31:0] alu_result,
     output        zero_flag      // 1 when alu_result == 0
 );
-  // ALU control encoding (one-hot)
   localparam ALU_ADD  = 4'b0000;
   localparam ALU_SUB  = 4'b0001;
   localparam ALU_SLL  = 4'b0010;
@@ -95,7 +83,7 @@ endmodule`,
   },
 };
 
-// ----------------- Register File Module -----------------
+
 export const REGFILE_MODULE: RtlModule = {
   name: 'rv32i_regfile',
   description:
@@ -117,12 +105,10 @@ export const REGFILE_MODULE: RtlModule = {
     for (i = 0; i < 32; i = i + 1) regs[i] = 32'b0;
   end
 
-  // Synchronous write — x0 hardwired to zero
   always @(posedge clk) begin
     if (we && waddr != 5'b0) regs[waddr] <= wdata;
   end
 
-  // Combinational read
   assign rdata1 = (raddr1 == 5'b0) ? 32'b0 : regs[raddr1];
   assign rdata2 = (raddr2 == 5'b0) ? 32'b0 : regs[raddr2];
 endmodule`,
@@ -137,8 +123,8 @@ endmodule`,
     { name: 'rdata2', direction: 'output', width: 32, description: 'Read port 2 data' },
   ],
   behavior: (i) => {
-    // Combinational read model — writes applied on the cycle's posedge
-    // We model "before write" state by reading from the i.__state map if present
+
+
     const state: number[] = (i as any).__state ?? new Array(32).fill(0);
     const we = i.we & 1;
     const waddr = i.waddr & 0x1f;
@@ -147,7 +133,7 @@ endmodule`,
     const raddr2 = i.raddr2 & 0x1f;
     const rdata1 = (raddr1 === 0) ? 0 : state[raddr1];
     const rdata2 = (raddr2 === 0) ? 0 : state[raddr2];
-    // Apply write (x0 protected)
+
     if (we && waddr !== 0) state[waddr] = wdata | 0;
     return { rdata1: rdata1 >>> 0, rdata2: rdata2 >>> 0, __state: state };
   },

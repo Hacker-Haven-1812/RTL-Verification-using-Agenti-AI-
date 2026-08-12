@@ -6,9 +6,9 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
-// Real RTL module sources — these are the actual designs under verification.
-// Sourced from /mini-services/riscv-verify/rtl/modules.ts (duplicated here for
-// client display since we cannot import server code from client components).
+
+
+
 const RTL_MODULES = [
   {
     name: 'rv32i_alu',
@@ -29,7 +29,6 @@ const RTL_MODULES = [
 );
   localparam ALU_ADD  = 4'b0000;
   localparam ALU_SUB  = 4'b0001;
-  // ... (8 more opcodes)
   wire [4:0] shamt = operand_b[4:0];
   always @(*) begin
     case (alu_ctrl)
@@ -77,11 +76,9 @@ endmodule`,
   initial begin
     for (i = 0; i < 32; i = i + 1) regs[i] = 32'b0;
   end
-  // Synchronous write — x0 hardwired to zero
   always @(posedge clk) begin
     if (we && waddr != 5'b0) regs[waddr] <= wdata;
   end
-  // Combinational read
   assign rdata1 = (raddr1 == 5'b0) ? 32'b0 : regs[raddr1];
   assign rdata2 = (raddr2 == 5'b0) ? 32'b0 : regs[raddr2];
 endmodule`,

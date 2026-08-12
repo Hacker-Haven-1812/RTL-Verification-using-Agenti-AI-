@@ -1,24 +1,4 @@
-/**
- * REAL Coverage Analyzer
- * ----------------------
- * Computes real, trace-derived coverage metrics:
- *
- *   1. Instruction Coverage   - fraction of RV32I mnemonics actually executed
- *   2. Branch Coverage        - fraction of branch instructions resolved both
- *                               "taken" and "not-taken" at least once
- *   3. Register Coverage      - fraction of x0..x31 written at least once
- *   4. Hazard Coverage        - fraction of hazard types observed (RAW, CONTROL)
- *   5. Memory Coverage        - bytes read + written at least once across the
- *                               64 KiB address space (bucketed)
- *   6. Functional Coverage    - higher-level scenarios detected in the trace
- *                               (e.g. overflow, division-by-zero sentinel,
- *                               signed compare, unsigned compare, hazard
- *                               chaining, jump-and-link roundtrip, etc.)
- *
- * The "missing case" output is the set of ISA features / functional scenarios
- * NOT exercised. This list is computed dynamically from the trace — there is
- * no hard-coded test list.
- */
+
 
 import { CoreTraceEntry, RV32I_INSTRUCTION_SET } from './core.js';
 
@@ -26,7 +6,7 @@ export interface CoverageReport {
   instructionCoverage: {
     total: number;
     hit: number;
-    ratio: number; // 0..1
+    ratio: number;
     hitMnemonicSet: string[];
     missingMnemonicSet: string[];
   };
@@ -34,7 +14,7 @@ export interface CoverageReport {
     totalBranchOps: number;
     takenObserved: number;
     notTakenObserved: number;
-    bothObserved: number; // branches that were both taken AND not-taken
+    bothObserved: number;
     ratio: number;
   };
   registerCoverage: {
@@ -62,17 +42,13 @@ export interface CoverageReport {
     total: number;
     ratio: number;
   };
-  overallCoverage: number; // 0..1 weighted
-  missingScenarios: string[]; // human-readable list, fed back to AI agent
+  overallCoverage: number;
+  missingScenarios: string[];
   totalCycles: number;
   totalInstructions: number;
 }
 
-/**
- * Functional scenarios we want to see in any decent RISC-V test run.
- * These are NOT pre-canned tests — they are property checks derived from
- * the trace. Each is a small stateless predicate over the trace.
- */
+
 const FUNCTIONAL_SCENARIOS: { name: string; description: string; check: (t: CoreTraceEntry[]) => boolean }[] = [
   {
     name: 'ARITH_OVERFLOW',
@@ -162,17 +138,17 @@ const FUNCTIONAL_SCENARIOS: { name: string; description: string; check: (t: Core
 ];
 
 export function analyzeCoverage(trace: CoreTraceEntry[], totalCycles: number): CoverageReport {
-  // ----------------- 1. Instruction coverage -----------------
+
   const hitSet = new Set<string>();
   for (const e of trace) {
-    const base = e.mnemonic.split(' ')[0]; // strip "ADDI 5" -> "ADDI"
+    const base = e.mnemonic.split(' ')[0];
     if (RV32I_INSTRUCTION_SET.includes(base as any)) hitSet.add(base);
   }
   const allInstr = [...RV32I_INSTRUCTION_SET];
   const hitInstr = allInstr.filter(m => hitSet.has(m));
   const missingInstr = allInstr.filter(m => !hitSet.has(m));
 
-  // ----------------- 2. Branch coverage -----------------
+
   const branchMnems = ['BEQ', 'BNE', 'BLT', 'BGE', 'BLTU', 'BGEU'];
   const branchInstances = new Map<string, { taken: boolean; notTaken: boolean; count: number }>();
   for (const e of trace) {
@@ -192,13 +168,13 @@ export function analyzeCoverage(trace: CoreTraceEntry[], totalCycles: number): C
   const totalBranchOps = branchArr.length;
   const branchRatio = totalBranchOps === 0 ? 0 : bothObserved / totalBranchOps;
 
-  // ----------------- 3. Register coverage -----------------
+
   const writtenRegs = new Set<number>();
   for (const e of trace) if (e.rd !== undefined && e.rd !== 0) writtenRegs.add(e.rd);
-  const allRegs = Array.from({ length: 31 }, (_, i) => i + 1); // x1..x31
+  const allRegs = Array.from({ length: 31 }, (_, i) => i + 1);
   const notWritten = allRegs.filter(r => !writtenRegs.has(r));
 
-  // ----------------- 4. Hazard coverage -----------------
+
   let rawCount = 0, controlCount = 0;
   for (const e of trace) {
     if (e.hazard.dataHazard) rawCount++;
@@ -206,7 +182,7 @@ export function analyzeCoverage(trace: CoreTraceEntry[], totalCycles: number): C
   }
   const hazardHit = (rawCount > 0 ? 1 : 0) + (controlCount > 0 ? 1 : 0);
 
-  // ----------------- 5. Memory coverage -----------------
+
   const memBytes = new Set<number>();
   let readBytes = 0, writtenBytes = 0;
   for (const e of trace) {
@@ -226,7 +202,7 @@ export function analyzeCoverage(trace: CoreTraceEntry[], totalCycles: number): C
   const totalMemBytes = 1 << 16;
   const memRatio = memBytes.size / totalMemBytes;
 
-  // ----------------- 6. Functional coverage -----------------
+
   const scenarios = FUNCTIONAL_SCENARIOS.map(s => ({
     name: s.name,
     description: s.description,
@@ -234,9 +210,9 @@ export function analyzeCoverage(trace: CoreTraceEntry[], totalCycles: number): C
   }));
   const hitFunc = scenarios.filter(s => s.hit).length;
 
-  // ----------------- Overall -----------------
-  // Weighted: instructions 30%, branches 20%, registers 10%, hazards 10%,
-  // memory 10%, functional 20%
+
+
+
   const overall =
     (hitInstr.length / allInstr.length) * 0.30 +
     branchRatio * 0.20 +
@@ -245,7 +221,7 @@ export function analyzeCoverage(trace: CoreTraceEntry[], totalCycles: number): C
     Math.min(memRatio * 100, 1) * 0.10 +
     (hitFunc / scenarios.length) * 0.20;
 
-  // ----------------- Missing scenario list -----------------
+
   const missingScenarios: string[] = [];
   for (const m of missingInstr) missingScenarios.push(`Instruction not yet exercised: ${m}`);
   for (const s of scenarios) if (!s.hit) missingScenarios.push(`Functional scenario not observed: ${s.name} — ${s.description}`);

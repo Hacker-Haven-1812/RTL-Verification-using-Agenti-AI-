@@ -1,7 +1,4 @@
-/**
- * Focused Stress Test — 5 key scenarios, runs in ~4 minutes.
- * Designed to complete within the rate limit budget.
- */
+
 import { io } from 'socket.io-client';
 
 interface TestScenario {

@@ -15,7 +15,7 @@ const io = new Server(httpServer, {
   pingInterval: 25000,
 });
 
-// Track active sessions so we can abort them
+
 const sessions = new Map<string, Orchestrator>();
 
 io.on('connection', (socket) => {
@@ -25,7 +25,7 @@ io.on('connection', (socket) => {
     const sessionId = config.sessionId ?? `session-${Date.now()}`;
     console.log(`[verify-service] start-verification sessionId=${sessionId} config=`, config);
 
-    // Abort any existing session for this socket
+
     const existing = sessions.get(socket.id);
     if (existing) existing.abort();
 
@@ -40,13 +40,13 @@ io.on('connection', (socket) => {
     };
 
     const emit = (e: OrchestratorEvent) => {
-      // Always include sessionId for client-side correlation
+
       socket.emit('orchestrator-event', { ...e, sessionId });
     };
     const orch = new Orchestrator(emit);
     sessions.set(socket.id, orch);
 
-    // Fire-and-forget — orchestrator emits events as it runs
+
     orch.run(fullConfig).catch((e) => {
       console.error(`[verify-service] orchestrator error:`, e);
       emit({ type: 'error', message: e.message, where: 'orchestrator' });
@@ -61,18 +61,18 @@ io.on('connection', (socket) => {
     }
   });
 
-  // ----------------------------------------------------------------
-  // NEW: Run a user-submitted custom RISC-V assembly program.
-  // Bypasses the AI agents entirely — the user writes the program,
-  // we assemble + simulate + analyze coverage, all deterministically.
-  // ----------------------------------------------------------------
+
+
+
+
+
   socket.on('run-custom-program', (payload: { sessionId: string; program: string; maxCycles?: number }) => {
     const sessionId = payload.sessionId ?? `custom-${Date.now()}`;
     console.log(`[verify-service] run-custom-program sessionId=${sessionId} bytes=${payload.program?.length ?? 0}`);
     const emit = (e: any) => socket.emit('orchestrator-event', { ...e, sessionId });
 
     try {
-      // Step 1: Assemble
+
       emit({ type: 'agent-activity', agent: 'Assembler', phase: 'thinking', message: 'Assembling user-submitted program...' });
       const asm = assemble(payload.program || '');
       emit({ type: 'agent-activity', agent: 'Assembler', phase: 'done', message: `Assembled ${asm.instructionCount} instructions${asm.errors.length > 0 ? ` with ${asm.errors.length} errors` : ''}` });
@@ -94,7 +94,7 @@ io.on('connection', (socket) => {
         return;
       }
 
-      // Step 2: Simulate
+
       emit({ type: 'sim-iteration-start', iteration: 1, targetScenarios: ['USER_PROVIDED'] });
       const mem = new Uint8Array(MEM_SIZE);
       mem.set(asm.bytes, 0);
@@ -102,7 +102,7 @@ io.on('connection', (socket) => {
       const core = new RV32ICore(mem, { maxCycles, startPc: 0, trackHazards: true });
       const result = core.run(maxCycles);
 
-      // Stream first 200 trace entries
+
       const STREAM_FIRST_N = 200;
       let lastStreamTime = 0;
       for (const e of result.trace.slice(0, STREAM_FIRST_N)) {
@@ -114,7 +114,7 @@ io.on('connection', (socket) => {
       }
       emit({ type: 'simulation-complete', iteration: 1, result });
 
-      // Step 3: Coverage Analysis
+
       const report = analyzeCoverage(result.trace, result.cycles);
       emit({ type: 'coverage-update', iteration: 1, report });
 
@@ -127,10 +127,10 @@ io.on('connection', (socket) => {
     }
   });
 
-  // ----------------------------------------------------------------
-  // NEW: Check a user-submitted custom formal property.
-  // The user writes a property in our DSL, we parse + check it.
-  // ----------------------------------------------------------------
+
+
+
+
   socket.on('check-custom-property', (payload: { sessionId: string; moduleName: string; declaration: string }) => {
     const sessionId = payload.sessionId ?? `custom-prop-${Date.now()}`;
     console.log(`[verify-service] check-custom-property sessionId=${sessionId} module=${payload.moduleName}`);

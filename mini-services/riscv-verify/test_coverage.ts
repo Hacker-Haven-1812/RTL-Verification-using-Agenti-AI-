@@ -1,8 +1,4 @@
-/**
- * Coverage goal achievement test.
- * Runs a verification session and reports whether the coverage goal was met.
- * Usage: bun test_coverage.ts <goal> <iterations> <cycles>
- */
+
 import { io } from 'socket.io-client';
 
 const goal = parseFloat(process.argv[2] ?? '0.80');
@@ -31,13 +27,13 @@ socket.on('orchestrator-event', (e: any) => {
     if (e.message?.includes('Generated') && !e.message?.includes('fallback')) llmSuccesses++;
   }
   if (e.type === 'coverage-update') {
-    // Track CUMULATIVE hit instructions across all iterations
+
     const hitSet = new Set(cumulativeHits);
     for (const m of (e.report.instructionCoverage.hitMnemonicSet || [])) hitSet.add(m);
     cumulativeHits = [...hitSet];
     const perIterCov = e.report?.overallCoverage ?? 0;
     const cumulativeInstrRatio = cumulativeHits.length / (e.report.instructionCoverage.total || 39);
-    // Approximate cumulative overall (instruction-weighted)
+
     coverage = Math.max(coverage, cumulativeInstrRatio * 0.5 + perIterCov * 0.5);
     const hit = e.report.instructionCoverage.hit;
     const missing = e.report.instructionCoverage.missingMnemonicSet;
@@ -46,7 +42,7 @@ socket.on('orchestrator-event', (e: any) => {
   }
   if (e.type === 'sim-loop-end') {
     console.log(`\nLoop ended: ${e.reason} at ${(e.finalCoverage*100).toFixed(1)}% (cumulative)`);
-    coverage = e.finalCoverage;  // use the orchestrator's cumulative value
+    coverage = e.finalCoverage;
   }
   if (e.type === 'session-ended') {
     const achieved = coverage >= goal;

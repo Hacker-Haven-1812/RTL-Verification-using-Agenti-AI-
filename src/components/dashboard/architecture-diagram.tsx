@@ -34,7 +34,7 @@ export function ArchitectureDiagram({ activePhase, currentIteration, formalActiv
       </CardHeader>
       <CardContent>
         <div className="relative">
-          {/* Input node */}
+          {}
           <div className="flex justify-center mb-3">
             <Node
               icon={Cpu}
@@ -44,15 +44,15 @@ export function ArchitectureDiagram({ activePhase, currentIteration, formalActiv
             />
           </div>
 
-          {/* Split into two paths */}
+          {}
           <div className="grid grid-cols-2 gap-4 relative">
-            {/* Connecting lines */}
+            {}
             <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ overflow: 'visible' }}>
               <line x1="50%" y1="0" x2="25%" y2="20" stroke="oklch(0.35 0.005 60)" strokeWidth="1" strokeDasharray="3 3" />
               <line x1="50%" y1="0" x2="75%" y2="20" stroke="oklch(0.35 0.005 60)" strokeWidth="1" strokeDasharray="3 3" />
             </svg>
 
-            {/* LEFT: Simulation Loop */}
+            {}
             <div className="space-y-2 pt-4">
               <div className="text-[10px] uppercase tracking-wider text-muted-foreground text-center font-medium">
                 Simulation Loop
@@ -112,7 +112,7 @@ export function ArchitectureDiagram({ activePhase, currentIteration, formalActiv
               )}
             </div>
 
-            {/* RIGHT: Formal Verification Path */}
+            {}
             <div className="space-y-2 pt-4">
               <div className="text-[10px] uppercase tracking-wider text-muted-foreground text-center font-medium">
                 Formal Verification

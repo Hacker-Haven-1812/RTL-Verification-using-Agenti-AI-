@@ -1,9 +1,9 @@
-// Shared types for the RISC-V Verification Dashboard
-// These mirror the orchestrator events sent over WebSocket.
+
+
 
 export interface OrchestratorConfig {
   sessionId: string;
-  coverageGoal: number;       // 0..1
+  coverageGoal: number;
   maxIterations: number;
   maxCyclesPerRun: number;
   targetModules: string[];
@@ -172,9 +172,9 @@ export interface VerificationState {
   errors: { message: string; where: string; timestamp: number }[];
   sessionStartTime: number | null;
   sessionEndTime: number | null;
-  // Cumulative coverage across ALL iterations (union of hit instructions,
-  // max branch/register/hazard/functional coverage). This is what the user
-  // actually cares about — "how much of the design have we tested so far?"
+
+
+
   cumulativeCoverage: number;
   cumulativeHitInstructions: string[];
   cumulativeInstructionCount: number;

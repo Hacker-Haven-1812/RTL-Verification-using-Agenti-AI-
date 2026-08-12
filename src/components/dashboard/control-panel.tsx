@@ -84,7 +84,7 @@ export function ControlPanel({ status, onStart, onAbort, onReset, availableModul
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
-        {/* Coverage goal slider */}
+        {}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <Label className="text-xs">Coverage Goal</Label>
@@ -100,7 +100,7 @@ export function ControlPanel({ status, onStart, onAbort, onReset, availableModul
           />
         </div>
 
-        {/* Max iterations */}
+        {}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <Label className="text-xs">Max Iterations</Label>
@@ -116,7 +116,7 @@ export function ControlPanel({ status, onStart, onAbort, onReset, availableModul
           />
         </div>
 
-        {/* Max cycles per run */}
+        {}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <Label className="text-xs">Max Cycles / Run</Label>
@@ -132,7 +132,7 @@ export function ControlPanel({ status, onStart, onAbort, onReset, availableModul
           />
         </div>
 
-        {/* Target RTL modules */}
+        {}
         <div className="space-y-1.5">
           <Label className="text-xs">Target modules (formal verification)</Label>
           <div className="flex flex-wrap gap-1">
@@ -153,7 +153,7 @@ export function ControlPanel({ status, onStart, onAbort, onReset, availableModul
           </div>
         </div>
 
-        {/* Seed scenarios */}
+        {}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <Label className="text-xs">Seed scenarios (iteration 1)</Label>
@@ -182,7 +182,7 @@ export function ControlPanel({ status, onStart, onAbort, onReset, availableModul
           )}
         </div>
 
-        {/* Advanced */}
+        {}
         <div className="space-y-1.5">
           <button
             onClick={() => setShowAdvanced(!showAdvanced)}
@@ -217,7 +217,7 @@ export function ControlPanel({ status, onStart, onAbort, onReset, availableModul
           )}
         </div>
 
-        {/* Action buttons */}
+        {}
         <div className="flex gap-2 pt-1">
           {!isRunning ? (
             <Button onClick={handleStart} className="flex-1">

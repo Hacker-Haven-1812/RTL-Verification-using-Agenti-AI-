@@ -25,7 +25,7 @@ export default function HomePage() {
   const { state, start, runCustomProgram, checkCustomProperty, abort, reset } = useVerification();
   const [wsConnected, setWsConnected] = useState(false);
 
-  // Track WebSocket connection state by polling the socket
+
   useEffect(() => {
     const check = () => {
       setWsConnected(true);
@@ -35,7 +35,7 @@ export default function HomePage() {
     return () => clearInterval(t);
   }, []);
 
-  // Derive the active phase from the most recent agent activity
+
   const activePhase = useMemo<'idle' | 'case-gen' | 'sim' | 'coverage' | 'missing-case' | 'formal'>(() => {
     const last = state.agentActivities[state.agentActivities.length - 1];
     if (!last || state.status !== 'running') return 'idle';
@@ -48,7 +48,7 @@ export default function HomePage() {
     return 'idle';
   }, [state.agentActivities, state.status]);
 
-  // Detect if formal path is active
+
   const formalActive = useMemo(() => {
     const formalAgents = state.agentActivities.filter(a => a.agent === 'Property Synthesizer' || a.agent === 'Formal Checker');
     if (formalAgents.length === 0) return false;
@@ -56,7 +56,7 @@ export default function HomePage() {
     return last.phase === 'thinking';
   }, [state.agentActivities]);
 
-  // Detect sim phase: between program-generated and coverage-update
+
   const simActive = useMemo(() => {
     if (state.status !== 'running') return false;
     if (activePhase === 'case-gen') return false;
@@ -64,7 +64,7 @@ export default function HomePage() {
     return false;
   }, [state.status, activePhase, state.latestProgram, state.latestReport]);
 
-  // Combine into the phase shown in the architecture diagram
+
   const diagramPhase = simActive ? 'sim' : activePhase;
 
   const coverageGoal = state.config?.coverageGoal ?? 0.85;
@@ -78,10 +78,10 @@ export default function HomePage() {
       />
 
       <div className="flex-1 px-3 md:px-4 py-3 space-y-3 relative z-10">
-        {/* Status bar */}
+        {}
         <StatusBar state={state} />
 
-        {/* Errors */}
+        {}
         {state.errors.length > 0 && (
           <Card className="border-rose-500/40 bg-rose-500/5">
             <CardContent className="p-3">
@@ -102,10 +102,10 @@ export default function HomePage() {
           </Card>
         )}
 
-        {/* Main grid: 3 columns on large screens */}
+        {}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
-          {/* LEFT column: control + RTL viewer + missing cases */}
-          <div className="lg:col-span-3 space-y-3">
+          {}
+          <div className="lg:col-span-3 space-y-3 lg:h-[calc(100vh-120px)] lg:overflow-y-auto lg:pr-1 lg:pb-4">
             <ControlPanel
               status={state.status}
               onStart={start}
@@ -122,8 +122,8 @@ export default function HomePage() {
             <MissingCasePanel suggestions={state.missingCaseSuggestions} />
           </div>
 
-          {/* MIDDLE column: architecture diagram + coverage + trace */}
-          <div className="lg:col-span-5 space-y-3">
+          {}
+          <div className="lg:col-span-5 space-y-3 lg:h-[calc(100vh-120px)] lg:overflow-y-auto lg:pr-1 lg:pb-4">
             <ArchitectureDiagram
               activePhase={diagramPhase}
               currentIteration={state.currentIteration}
@@ -138,8 +138,8 @@ export default function HomePage() {
             <InstructionTracePanel trace={state.trace} />
           </div>
 
-          {/* RIGHT column: agent activity + program + formal + coverage analysis */}
-          <div className="lg:col-span-4 space-y-3">
+          {}
+          <div className="lg:col-span-4 space-y-3 lg:h-[calc(100vh-120px)] lg:overflow-y-auto lg:pr-1 lg:pb-4">
             <AgentActivityPanel activities={state.agentActivities} />
             <GeneratedProgramPanel program={state.latestProgram} />
             <CoverageAnalysisPanel analysis={state.latestAnalysis} />
@@ -147,7 +147,7 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Minimal footer */}
+        {}
         <footer className="pt-3 pb-2 border-t border-border/40">
           <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
             <span className="font-mono">RV32I · RV32I base ISA · 32 registers · 64 KiB memory</span>
@@ -156,7 +156,7 @@ export default function HomePage() {
         </footer>
       </div>
 
-      {/* Sticky bottom status indicator + session summary */}
+      {}
       <StatusFooter state={state} onReset={reset} />
     </main>
   );

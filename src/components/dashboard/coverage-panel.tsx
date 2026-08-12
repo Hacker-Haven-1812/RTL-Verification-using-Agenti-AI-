@@ -48,7 +48,7 @@ export function CoveragePanel({ report, history }: Props) {
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
-        {/* Overall + sparkline */}
+        {}
         <div className="rounded-md border border-border/60 bg-muted/30 p-3">
           <div className="flex items-end justify-between mb-2">
             <div>
@@ -76,7 +76,7 @@ export function CoveragePanel({ report, history }: Props) {
           </div>
         </div>
 
-        {/* Coverage gauges */}
+        {}
         <div className="grid grid-cols-2 gap-2">
           <GaugeRow
             label="Instruction"
@@ -110,7 +110,7 @@ export function CoveragePanel({ report, history }: Props) {
           />
         </div>
 
-        {/* Missing scenarios */}
+        {}
         {report && report.missingScenarios.length > 0 && (
           <TooltipProvider delayDuration={200}>
             <div className="rounded-md border border-border bg-muted/30 p-2">
@@ -145,7 +145,7 @@ export function CoveragePanel({ report, history }: Props) {
           </TooltipProvider>
         )}
 
-        {/* Instruction hit/miss matrix */}
+        {}
         {report && (
           <div className="rounded-md border border-border/60 p-2">
             <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">RV32I Instruction Coverage</div>

@@ -1,24 +1,8 @@
-/**
- * REAL RISC-V RV32I Single-Cycle Core Simulator
- * ----------------------------------------------
- * Implements the entire RV32I base integer instruction set:
- *   - Arithmetic/Logic:    ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND
- *   - Immediate variants:  ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI
- *   - Memory:              LW, LH, LHU, LB, LBU, SW, SH, SB
- *   - Control:             BEQ, BNE, BLT, BGE, BLTU, BGEU, JAL, JALR
- *   - Upper immediate:     LUI, AUIPC
- *   - System:              ECALL, EBREAK
- *
- * The core exposes an instruction-by-instruction step() function so that the
- * coverage analyzer can collect real execution traces (PC, opcode, regs read,
- * regs written, hazard info, branch resolution, memory accesses).
- *
- * NOTHING is mocked. Every instruction is actually decoded and executed.
- */
+
 
 export type RegCount = 32;
 export const REG_COUNT: RegCount = 32;
-export const MEM_SIZE = 1 << 16; // 64 KiB - plenty for small test programs
+export const MEM_SIZE = 1 << 16;
 
 export interface CoreTraceEntry {
   cycle: number;
@@ -176,7 +160,7 @@ export class RV32ICore {
       );
 
       switch (opcode) {
-        case 0x13: { // OP-IMM
+        case 0x13: {
           entry.mnemonic = this.opImmMnemonic(funct3, funct7, immI);
           entry.rs1 = rs1; entry.rs1Val = r1;
           entry.rd = rd;
@@ -198,7 +182,7 @@ export class RV32ICore {
           break;
         }
 
-        case 0x33: { // OP (register-register ALU)
+        case 0x33: {
           entry.mnemonic = this.opMnemonic(funct3, funct7);
           entry.rs1 = rs1; entry.rs1Val = r1;
           entry.rs2 = rs2; entry.rs2Val = r2;
@@ -218,7 +202,7 @@ export class RV32ICore {
           break;
         }
 
-        case 0x03: { // LOAD
+        case 0x03: {
           const sizeMap: Record<number, number> = { 0: 1, 1: 2, 2: 4, 4: 1, 5: 2 };
           const signedMap: Record<number, boolean> = { 0: true, 1: true, 2: false, 4: false, 5: false };
           const mnemMap: Record<number, string> = { 0: 'LB', 1: 'LH', 2: 'LW', 4: 'LBU', 5: 'LHU' };
@@ -234,7 +218,7 @@ export class RV32ICore {
           break;
         }
 
-        case 0x23: { // STORE
+        case 0x23: {
           const sizeMap: Record<number, number> = { 0: 1, 1: 2, 2: 4 };
           const mnemMap: Record<number, string> = { 0: 'SB', 1: 'SH', 2: 'SW' };
           const size = sizeMap[funct3] ?? 4;
@@ -247,7 +231,7 @@ export class RV32ICore {
           break;
         }
 
-        case 0x63: { // BRANCH
+        case 0x63: {
           const mnemMap: Record<number, string> = { 0: 'BEQ', 1: 'BNE', 4: 'BLT', 5: 'BGE', 6: 'BLTU', 7: 'BGEU' };
           entry.mnemonic = mnemMap[funct3] ?? 'B?';
           entry.rs1 = rs1; entry.rs1Val = r1;
@@ -269,7 +253,7 @@ export class RV32ICore {
           break;
         }
 
-        case 0x6f: { // JAL
+        case 0x6f: {
           entry.mnemonic = 'JAL';
           entry.rd = rd;
           branchTaken = true;
@@ -279,7 +263,7 @@ export class RV32ICore {
           break;
         }
 
-        case 0x67: { // JALR
+        case 0x67: {
           entry.mnemonic = 'JALR';
           entry.rs1 = rs1; entry.rs1Val = r1;
           entry.rd = rd;
@@ -290,21 +274,21 @@ export class RV32ICore {
           break;
         }
 
-        case 0x37: { // LUI
+        case 0x37: {
           entry.mnemonic = 'LUI';
           entry.rd = rd;
           wrote = true; wroteReg = rd; wroteVal = immU | 0;
           break;
         }
 
-        case 0x17: { // AUIPC
+        case 0x17: {
           entry.mnemonic = 'AUIPC';
           entry.rd = rd;
           wrote = true; wroteReg = rd; wroteVal = (this.pc + immU) | 0;
           break;
         }
 
-        case 0x73: { // SYSTEM
+        case 0x73: {
           const imm12 = (raw >> 20) & 0xfff;
           if (imm12 === 0) {
             entry.mnemonic = 'ECALL';

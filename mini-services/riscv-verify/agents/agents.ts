@@ -1,33 +1,4 @@
-/**
- * REAL AI Agents — powered by z-ai-web-dev-sdk
- * ---------------------------------------------
- * Four specialized agents as described in the VLSID 2026 design track:
- *
- *   1. Case Generation Agent
- *      - Input: a request describing which scenarios to target (or the
- *        coverage-gap list from agent #3)
- *      - Output: a RISC-V RV32I assembly program (text)
- *
- *   2. Coverage Analysis Agent
- *      - Input: a CoverageReport (computed by the deterministic analyzer)
- *      - Output: a natural-language summary of what's covered and what's
- *        weak, with prioritized recommendations
- *
- *   3. Missing Case Suggestion Agent
- *      - Input: the coverage report + the previous test program
- *      - Output: a structured list of suggested new test cases (with
- *        rationale), fed back to agent #1
- *
- *   4. Property Generation Agent
- *      - Input: a target RTL module (Verilog source) + a natural-language
- *        spec hint
- *      - Output: formal properties in our small DSL (parseable by
- *        rtl/formal.ts)
- *
- * Every agent prompt is constructed from real data (coverage report, RTL
- * source, missing-scenario list). Nothing about the *tests* or *properties*
- * is hard-coded — the agents generate them at runtime via the LLM.
- */
+
 
 import ZAI from 'z-ai-web-dev-sdk';
 import type { CoverageReport } from '../rv32i/coverage.js';
@@ -39,20 +10,20 @@ async function getZai() {
   return _zai;
 }
 
-// ----------------- Retry + Rate-Limit Helpers -----------------
-//
-// The z-ai LLM endpoint enforces rate limits. When we fire many agent calls in
-// rapid succession (especially in parallel — Case Gen + Property Gen), we get
-// HTTP 429 "Too many requests". These helpers fix that:
-//
-//   - `llmChat()` wraps every LLM call with exponential backoff retry.
-//   - A global mutex serializes all LLM calls so we never fire two at once.
-//   - A minimum inter-call delay spaces out successive calls.
 
-const MIN_CALL_INTERVAL_MS = 1500;       // ≥1.5s between LLM calls
-const MAX_RETRIES = 2;                   // fall back to deterministic fast
-const BASE_BACKOFF_MS = 1500;             // start at 1.5s
-const MAX_BACKOFF_MS = 8_000;            // cap at 8s
+
+
+
+
+
+
+
+
+
+const MIN_CALL_INTERVAL_MS = 1500;
+const MAX_RETRIES = 2;
+const BASE_BACKOFF_MS = 1500;
+const MAX_BACKOFF_MS = 8_000;
 
 let _lastCallTime = 0;
 let _llmMutex: Promise<any> = Promise.resolve();
@@ -62,7 +33,7 @@ function sleep(ms: number) {
 }
 
 async function llmChat(messages: { role: string; content: string }[], opts: { temperature?: number; max_tokens?: number } = {}) {
-  // Serialize all LLM calls through a single mutex — prevents parallel 429s
+
   let release: () => void;
   const wait = new Promise<void>((resolve) => { release = resolve; });
   const prev = _llmMutex;
@@ -70,7 +41,7 @@ async function llmChat(messages: { role: string; content: string }[], opts: { te
   await prev;
 
   try {
-    // Enforce minimum inter-call interval
+
     const now = Date.now();
     const elapsed = now - _lastCallTime;
     if (elapsed < MIN_CALL_INTERVAL_MS) {
@@ -94,15 +65,15 @@ async function llmChat(messages: { role: string; content: string }[], opts: { te
         const is429 = msg.includes('429') || msg.includes('too many requests') || msg.includes('rate');
         const is5xx = msg.includes('500') || msg.includes('502') || msg.includes('503') || msg.includes('504') || msg.includes('server error');
         if (is429 || is5xx) {
-          // Backoff: 3s, 6s, 12s, 24s, 48s, 60s (capped) + jitter
+
           const backoff = Math.min(MAX_BACKOFF_MS, BASE_BACKOFF_MS * Math.pow(2, attempt)) + Math.random() * 1000;
           console.error(`[agents] LLM call failed (attempt ${attempt + 1}/${MAX_RETRIES}): ${msg.slice(0, 100)} — retrying in ${(backoff / 1000).toFixed(1)}s`);
           await sleep(backoff);
-          // Reset lastCallTime so the next attempt also respects the interval
+
           _lastCallTime = Date.now();
           continue;
         }
-        // Non-retryable error — throw immediately
+
         throw e;
       }
     }
@@ -112,17 +83,17 @@ async function llmChat(messages: { role: string; content: string }[], opts: { te
   }
 }
 
-// ----------------- Agent 1: Case Generation -----------------
+
 export interface CaseGenRequest {
-  targetScenarios?: string[];      // human-readable scenario names to hit
-  missingScenarios?: string[];     // from coverage analyzer
-  previousProgram?: string;        // last program we tried
+  targetScenarios?: string[];
+  missingScenarios?: string[];
+  previousProgram?: string;
   iteration: number;
-  instructionMixHint?: string;     // free-form hint
-  // NEW: cumulative coverage tracking across ALL iterations
-  alreadyHitInstructions?: string[];   // mnemonics exercised in prior iterations
-  missingInstructions?: string[];      // mnemonics NOT yet exercised
-  coverageHistory?: { iteration: number; overall: number }[];  // coverage trend
+  instructionMixHint?: string;
+
+  alreadyHitInstructions?: string[];
+  missingInstructions?: string[];
+  coverageHistory?: { iteration: number; overall: number }[];
 }
 
 export interface CaseGenResult {
@@ -174,7 +145,7 @@ export async function caseGenerationAgent(req: CaseGenRequest): Promise<CaseGenR
   const lines: string[] = [];
   lines.push(`ITERATION: ${req.iteration}`);
 
-  // Coverage trend
+
   if (req.coverageHistory && req.coverageHistory.length > 0) {
     lines.push(`COVERAGE TREND across previous iterations:`);
     for (const h of req.coverageHistory) {
@@ -182,7 +153,7 @@ export async function caseGenerationAgent(req: CaseGenRequest): Promise<CaseGenR
     }
   }
 
-  // CRITICAL: Show the agent exactly what's been hit and what's missing
+
   if (req.alreadyHitInstructions && req.alreadyHitInstructions.length > 0) {
     lines.push(``);
     lines.push(`ALREADY EXERCISED (${req.alreadyHitInstructions.length} instructions — DO NOT repeat these unless needed for control flow):`);
@@ -230,20 +201,20 @@ export async function caseGenerationAgent(req: CaseGenRequest): Promise<CaseGenR
 }
 
 function parseCaseGenResponse(text: string): CaseGenResult {
-  // Try to extract the ---PROGRAM--- / ---RATIONALE--- / ---TARGETS--- blocks
+
   const progMatch = text.match(/---\s*PROGRAM\s*---\s*([\s\S]*?)(?=---\s*RATIONALE\s*---|$)/);
   const ratMatch = text.match(/---\s*RATIONALE\s*---\s*([\s\S]*?)(?=---\s*TARGETS\s*---|$)/);
   const tgtMatch = text.match(/---\s*TARGETS\s*---\s*([\s\S]*?)$/);
 
   let program = progMatch ? progMatch[1].trim() : '';
   if (!program) {
-    // Fallback: strip markdown fences and treat the whole text as program
+
     program = text.replace(/```[a-z]*\n?/g, '').replace(/```/g, '').trim();
-    // Cut at any trailing prose-looking section
+
     const cut = program.search(/\n(About this program|Explanation:|Notes:)/i);
     if (cut > 0) program = program.slice(0, cut).trim();
   }
-  // Strip markdown fences if present
+
   program = program.replace(/```[a-z]*\n?/g, '').replace(/```/g, '').trim();
 
   const rationale = ratMatch ? ratMatch[1].trim() : '';
@@ -254,7 +225,7 @@ function parseCaseGenResponse(text: string): CaseGenResult {
   return { program, rationale, targets };
 }
 
-// ----------------- Agent 2: Coverage Analysis -----------------
+
 export interface CoverageAnalysisResult {
   summary: string;
   strongAreas: string[];
@@ -331,7 +302,7 @@ function parseCoverageResponse(text: string): CoverageAnalysisResult {
   return { summary, strongAreas: strong, weakAreas: weak, prioritizedRecommendations: recs };
 }
 
-// ----------------- Agent 3: Missing Case Suggestion -----------------
+
 export interface MissingCaseResult {
   suggestions: { scenario: string; rationale: string; suggestedInstructions: string[] }[];
 }
@@ -387,7 +358,6 @@ function parseMissingCaseResponse(text: string): MissingCaseResult {
   return { suggestions };
 }
 
-// ----------------- Agent 4: Property Generation -----------------
 export interface PropertyGenResult {
   properties: { name: string; declaration: string; explanation: string }[];
 }
@@ -477,16 +447,13 @@ The properties must be checkable against the behavioral model.`;
 }
 
 function parsePropertyResponse(text: string): PropertyGenResult {
-  // Strip markdown fences
   const cleaned = text.replace(/```[a-z]*\n?/g, '').replace(/```/g, '');
-  // Split on PROPERTY: marker
   const blocks = cleaned.split(/\n(?=PROPERTY\s+\w+\s*:)/);
   const properties: { name: string; declaration: string; explanation: string }[] = [];
   for (const b of blocks) {
     const m = b.match(/PROPERTY\s+(\w+)\s*:/);
     if (!m) continue;
     const name = m[1];
-    // Property body = everything up to EXPLANATION:
     const bodyEnd = b.search(/\nEXPLANATION:/i);
     const declaration = (bodyEnd >= 0 ? b.slice(0, bodyEnd) : b).trim();
     const explanation = (b.match(/EXPLANATION:\s*(.+)/i)?.[1] ?? '').trim();

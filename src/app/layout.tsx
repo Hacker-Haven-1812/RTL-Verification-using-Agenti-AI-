@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "RV32I Verification Console",
+  title: "RTL Verification Using Agentic AI",
   description:
     "Autonomous RTL verification and testing framework for RISC-V processors — closed-loop simulation with coverage closure and formal property checking.",
   keywords: [

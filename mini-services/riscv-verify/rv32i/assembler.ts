@@ -1,23 +1,4 @@
-/**
- * REAL RISC-V RV32I Assembler
- * ----------------------------
- * Two-pass assembler supporting the entire RV32I base ISA.
- *
- *   Pass 1: Resolve labels (collect symbol table).
- *   Pass 2: Encode each instruction to a 32-bit word.
- *
- * Supports:
- *   - All register names: x0..x31, zero, ra, sp, gp, tp, t0..t6, s0..s11,
- *     a0..a7, fp
- *   - Pseudo-instructions: li, mv, nop, j, jr, ret, beqz, bnez, bltz, bgez,
- *     neg, not, seqz, snez, la (best-effort), b (unconditional branch alias)
- *   - Comments starting with # or ;
- *   - Blank lines
- *   - Directives: .word, .byte, .half, .string/.ascii, .org (for setting PC)
- *
- * The output is a Uint8Array of little-endian machine code, ready to be
- * loaded into the simulator's memory at offset 0.
- */
+
 
 export interface AssemblerError {
   line: number;
@@ -28,7 +9,7 @@ export interface AssemblerResult {
   bytes: Uint8Array;
   errors: AssemblerError[];
   symbols: Record<string, number>;
-  lineMap: number[]; // byteOffset -> source line number (1-indexed)
+  lineMap: number[];
   instructionCount: number;
 }
 
@@ -86,9 +67,9 @@ function parseImm(tok: string, symbols: Record<string, number>, line: number): n
   return n;
 }
 
-// Split a line into (label?, mnemonic, operands[]) — handles "label:" prefix
+
 function tokenizeLine(line: string): { label?: string; mnemonic?: string; operands: string[] } {
-  // Strip comments
+
   let l = line;
   const hashIdx = l.search(/[#;]/);
   if (hashIdx >= 0) l = l.slice(0, hashIdx);
@@ -96,7 +77,7 @@ function tokenizeLine(line: string): { label?: string; mnemonic?: string; operan
   if (!l) return { operands: [] };
 
   let label: string | undefined;
-  // A label may be "label:" possibly followed by an instruction
+
   const labelMatch = l.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.*)$/);
   if (labelMatch) {
     label = labelMatch[1];
@@ -104,7 +85,7 @@ function tokenizeLine(line: string): { label?: string; mnemonic?: string; operan
     if (!l) return { label, operands: [] };
   }
 
-  // Mnemonic = first whitespace-separated token; operands = comma-separated remainder
+
   const sp = l.search(/\s/);
   let mnemonic: string | undefined;
   let rest = '';
@@ -118,9 +99,9 @@ function tokenizeLine(line: string): { label?: string; mnemonic?: string; operan
   return { label, mnemonic: mnemonic.toLowerCase(), operands };
 }
 
-// ----------------- Instruction encoders -----------------
-// Each returns a 32-bit unsigned word. All immediate fields use signed/unsigned
-// values consistent with the RISC-V spec — no offset hacking.
+
+
+
 
 function encR(funct7: number, rs2: number, rs1: number, funct3: number, rd: number, opcode: number): number {
   return (((funct7 & 0x7f) << 25) | ((rs2 & 0x1f) << 20) | ((rs1 & 0x1f) << 15) |
@@ -137,7 +118,7 @@ function encS(imm: number, rs2: number, rs1: number, funct3: number, opcode: num
     ((funct3 & 0x7) << 12) | (imm4_0 << 7) | (opcode & 0x7f)) >>> 0;
 }
 function encB(imm: number, rs2: number, rs1: number, funct3: number, opcode: number): number {
-  // imm is signed 13-bit, bit 0 always 0
+
   const i = imm & 0x1fff;
   const imm12 = (i >> 12) & 0x1;
   const imm10_5 = (i >> 5) & 0x3f;
@@ -186,7 +167,7 @@ export function assemble(source: string): AssemblerResult {
   const lines = source.split(/\r?\n/);
   const symbols: Record<string, number> = {};
 
-  // ----------------- Pass 1: collect symbols -----------------
+
   let pc = 0;
   const parsedLines: { lineNo: number; label?: string; mnemonic?: string; operands: string[] }[] = [];
   for (let i = 0; i < lines.length; i++) {
@@ -205,7 +186,7 @@ export function assemble(source: string): AssemblerResult {
       symbols[parsed.label] = pc;
     }
     if (parsed.mnemonic) {
-      // Directives affect layout
+
       if (parsed.mnemonic === '.org') {
         try {
           pc = parseImm(parsed.operands[0], {}, lineNo);
@@ -222,15 +203,15 @@ export function assemble(source: string): AssemblerResult {
         const s = parsed.operands.join(',').replace(/^"|"$/g, '');
         pc += s.length + (parsed.mnemonic === '.string' ? 1 : 0);
       } else if (parsed.mnemonic.startsWith('.')) {
-        // Unknown directive - ignore
+
       } else if (parsed.mnemonic === 'li') {
-        // li expands to 1 or 2 real instructions depending on the immediate
+
         try {
           const imm = parseImm(parsed.operands[1] ?? '0', {}, lineNo);
           if (imm >= -2048 && imm <= 2047) pc += 4;
-          else pc += 8; // lui + addi
+          else pc += 8;
         } catch {
-          pc += 8; // assume worst case
+          pc += 8;
         }
       } else {
         pc += 4;
@@ -241,8 +222,8 @@ export function assemble(source: string): AssemblerResult {
     }
   }
 
-  // ----------------- Pass 2: encode -----------------
-  // Allocate buffer big enough — we'll trim at the end
+
+
   const maxBytes = pc + 64;
   const buf = new Uint8Array(maxBytes);
   pc = 0;
@@ -284,21 +265,21 @@ export function assemble(source: string): AssemblerResult {
 
       let word: number | null = null;
 
-      // R-type
+
       if (R_OPS[m]) {
         const rd = parseReg(p.operands[0], p.lineNo);
         const rs1 = parseReg(p.operands[1], p.lineNo);
         const rs2 = parseReg(p.operands[2], p.lineNo);
         word = encR(R_OPS[m].funct7, rs2, rs1, R_OPS[m].funct3, rd, 0x33);
       }
-      // I-type arithmetic
+
       else if (I_OPS[m] !== undefined && m !== 'slli' && m !== 'srli' && m !== 'srai') {
         const rd = parseReg(p.operands[0], p.lineNo);
         const rs1 = parseReg(p.operands[1], p.lineNo);
         const imm = parseImm(p.operands[2], symbols, p.lineNo);
         word = encI(imm, rs1, I_OPS[m], rd, 0x13);
       }
-      // Shift immediates
+
       else if (m === 'slli' || m === 'srli' || m === 'srai') {
         const rd = parseReg(p.operands[0], p.lineNo);
         const rs1 = parseReg(p.operands[1], p.lineNo);
@@ -306,10 +287,10 @@ export function assemble(source: string): AssemblerResult {
         const funct7 = (m === 'srai') ? 0x20 : 0x00;
         word = encR(funct7, shamt, rs1, I_OPS[m], rd, 0x13);
       }
-      // Load
+
       else if (LOAD_OPS[m] !== undefined) {
         const rd = parseReg(p.operands[0], p.lineNo);
-        // Two forms: "lw rd, imm(rs1)" or "lw rd, rs1, imm"
+
         let rs1: number, imm: number;
         if (p.operands[1].includes('(')) {
           const m2 = p.operands[1].match(/^(-?\w+|0x[0-9a-fA-F]+)?\(?(\w+)\)?$/);
@@ -322,7 +303,7 @@ export function assemble(source: string): AssemblerResult {
         }
         word = encI(imm, rs1, LOAD_OPS[m], rd, 0x03);
       }
-      // Store
+
       else if (STORE_OPS[m] !== undefined) {
         const rs2 = parseReg(p.operands[0], p.lineNo);
         let rs1: number, imm: number;
@@ -337,7 +318,7 @@ export function assemble(source: string): AssemblerResult {
         }
         word = encS(imm, rs2, rs1, STORE_OPS[m], 0x23);
       }
-      // Branch
+
       else if (BRANCH_OPS[m] !== undefined) {
         const rs1 = parseReg(p.operands[0], p.lineNo);
         const rs2 = parseReg(p.operands[1], p.lineNo);
@@ -345,10 +326,10 @@ export function assemble(source: string): AssemblerResult {
         const off = target - pc;
         word = encB(off, rs2, rs1, BRANCH_OPS[m], 0x63);
       }
-      // JAL
+
       else if (m === 'jal') {
         if (p.operands.length === 1) {
-          // Pseudo: "jal label" -> "jal ra, label"
+
           const target = parseImm(p.operands[0], symbols, p.lineNo);
           const off = target - pc;
           word = encJ(off, 1, 0x6f);
@@ -359,7 +340,7 @@ export function assemble(source: string): AssemblerResult {
           word = encJ(off, rd, 0x6f);
         }
       }
-      // JALR
+
       else if (m === 'jalr') {
         if (p.operands.length === 1) {
           word = encI(0, parseReg(p.operands[0], p.lineNo), 0x0, 1, 0x67);
@@ -370,7 +351,7 @@ export function assemble(source: string): AssemblerResult {
           word = encI(imm, rs1, 0x0, rd, 0x67);
         }
       }
-      // LUI / AUIPC
+
       else if (m === 'lui') {
         const rd = parseReg(p.operands[0], p.lineNo);
         const imm = parseImm(p.operands[1], symbols, p.lineNo);
@@ -380,20 +361,20 @@ export function assemble(source: string): AssemblerResult {
         const imm = parseImm(p.operands[1], symbols, p.lineNo);
         word = encU(imm, rd, 0x17);
       }
-      // System
+
       else if (m === 'ecall') {
         word = encI(0, 0, 0x0, 0, 0x73);
       } else if (m === 'ebreak') {
         word = encI(1, 0, 0x0, 0, 0x73);
       }
-      // Pseudo-instructions
+
       else if (m === 'li') {
         const rd = parseReg(p.operands[0], p.lineNo);
         const imm = parseImm(p.operands[1], symbols, p.lineNo);
         if (imm >= -2048 && imm <= 2047) {
-          word = encI(imm, 0, 0x0, rd, 0x13); // addi rd, x0, imm
+          word = encI(imm, 0, 0x0, rd, 0x13);
         } else {
-          // lui rd, upper20 ; addi rd, rd, lower12
+
           const upper = (imm + 0x800) & 0xfffff000;
           const lower = imm & 0xfff;
           const w1 = encU(upper, rd, 0x37);
@@ -410,16 +391,16 @@ export function assemble(source: string): AssemblerResult {
       } else if (m === 'j') {
         const target = parseImm(p.operands[0], symbols, p.lineNo);
         const off = target - pc;
-        word = encJ(off, 0, 0x6f); // jal x0, off
+        word = encJ(off, 0, 0x6f);
       } else if (m === 'jr') {
         const rs1 = parseReg(p.operands[0], p.lineNo);
         word = encI(0, rs1, 0x0, 0, 0x67);
       } else if (m === 'ret') {
-        word = encI(0, 1, 0x0, 0, 0x67); // jalr x0, ra, 0
+        word = encI(0, 1, 0x0, 0, 0x67);
       } else if (m === 'b') {
         const target = parseImm(p.operands[0], symbols, p.lineNo);
         const off = target - pc;
-        word = encB(off, 0, 0, 0x0, 0x63); // beq x0, x0, off
+        word = encB(off, 0, 0, 0x0, 0x63);
       } else if (m === 'beqz') {
         const rs1 = parseReg(p.operands[0], p.lineNo);
         const target = parseImm(p.operands[1], symbols, p.lineNo);
@@ -443,19 +424,19 @@ export function assemble(source: string): AssemblerResult {
       } else if (m === 'neg') {
         const rd = parseReg(p.operands[0], p.lineNo);
         const rs1 = parseReg(p.operands[1], p.lineNo);
-        word = encR(0x20, rs1, 0, 0x0, rd, 0x33); // sub rd, x0, rs1
+        word = encR(0x20, rs1, 0, 0x0, rd, 0x33);
       } else if (m === 'not') {
         const rd = parseReg(p.operands[0], p.lineNo);
         const rs1 = parseReg(p.operands[1], p.lineNo);
-        word = encI(-1, rs1, 0x4, rd, 0x13); // xori rd, rs1, -1
+        word = encI(-1, rs1, 0x4, rd, 0x13);
       } else if (m === 'seqz') {
         const rd = parseReg(p.operands[0], p.lineNo);
         const rs1 = parseReg(p.operands[1], p.lineNo);
-        word = encI(1, rs1, 0x3, rd, 0x13); // sltiu rd, rs1, 1
+        word = encI(1, rs1, 0x3, rd, 0x13);
       } else if (m === 'snez') {
         const rd = parseReg(p.operands[0], p.lineNo);
         const rs1 = parseReg(p.operands[1], p.lineNo);
-        word = encR(0, rs1, 0, 0x3, rd, 0x33); // sltu rd, x0, rs1
+        word = encR(0, rs1, 0, 0x3, rd, 0x33);
       } else {
         throw new Error(`Line ${p.lineNo}: unknown instruction '${m}'`);
       }
@@ -474,7 +455,7 @@ export function assemble(source: string): AssemblerResult {
     }
   }
 
-  // Trim to actual size
+
   const bytes = buf.slice(0, pc);
   return { bytes, errors, symbols, lineMap: lineMap.slice(0, pc), instructionCount: instrCount };
 }

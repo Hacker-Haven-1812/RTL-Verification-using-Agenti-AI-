@@ -1,16 +1,4 @@
-/**
- * Deterministic Fallback Program Generator
- * -----------------------------------------
- * When the LLM is unavailable (rate-limited or errored), this module generates
- * a real RV32I assembly program that targets the SPECIFIC missing instructions.
- *
- * This is NOT a mock — it produces real, runnable assembly that exercises the
- * exact instructions in the missing list. Each instruction gets a real test
- * case with proper operands and control flow.
- *
- * The generator builds programs instruction-family by instruction-family,
- * ensuring every missing instruction is actually executed.
- */
+
 
 const ALL_INSTRUCTIONS = [
   'LUI', 'AUIPC', 'JAL', 'JALR',
@@ -22,8 +10,8 @@ const ALL_INSTRUCTIONS = [
   'ECALL', 'EBREAK',
 ];
 
-// Template snippets that exercise specific instructions.
-// Each snippet is a self-contained block that can be concatenated.
+
+
 const INSTRUCTION_TEMPLATES: Record<string, string> = {
   LUI: `  lui t0, 0x10000     # LUI: load upper immediate`,
   AUIPC: `  auipc t1, 0x10      # AUIPC: PC-relative upper immediate`,
@@ -178,10 +166,7 @@ bgeu_nt:`,
   EBREAK: `  ebreak`,
 };
 
-/**
- * Generate a program that exercises the given missing instructions.
- * Uses unique labels per instruction to avoid duplicate-label errors.
- */
+
 export function generateFallbackProgram(missingInstructions: string[], iteration: number): string {
   const lines: string[] = [];
   lines.push(`# Auto-generated test program (iteration ${iteration})`);
@@ -192,16 +177,16 @@ export function generateFallbackProgram(missingInstructions: string[], iteration
   lines.push(`main:`);
   lines.push(`  li sp, 0x2000      # set up stack pointer`);
 
-  // Add templates for each missing instruction with UNIQUE labels.
+
   const toTarget = missingInstructions.slice(0, 25);
 
-  // If there are no missing instructions but we haven't met the goal yet,
-  // generate a broad program to improve OTHER coverage dimensions (branches,
-  // registers, hazards, functional scenarios).
+
+
+
   if (toTarget.length === 0) {
     lines.push(``);
     lines.push(`  # All instructions hit — generating broad program to improve other coverage dimensions`);
-    // Use a diverse subset to exercise different registers, branches, and memory
+
     const broadSet = ['LUI', 'AUIPC', 'ADDI', 'SLTI', 'XORI', 'ORI', 'ANDI', 'SLLI', 'SRLI', 'SRAI',
                       'ADD', 'SUB', 'SLL', 'SLT', 'SLTU', 'XOR', 'SRL', 'SRA', 'OR', 'AND',
                       'BEQ', 'BNE', 'BLT', 'BGE', 'BLTU', 'BGEU',
@@ -214,7 +199,7 @@ export function generateFallbackProgram(missingInstructions: string[], iteration
   for (const instr of toTarget) {
     const template = INSTRUCTION_TEMPLATES[instr];
     if (template) {
-      // Make all labels unique by appending _N to label definitions and references.
+
       const suffix = `_${labelCounter++}`;
       const labelDefs = [...template.matchAll(/^(\w+):/gm)].map(m => m[1]);
       let uniqueTemplate = template;
@@ -227,7 +212,7 @@ export function generateFallbackProgram(missingInstructions: string[], iteration
     }
   }
 
-  // Always end with ebreak
+
   if (!toTarget.includes('EBREAK')) {
     lines.push(`  ebreak`);
   }
@@ -235,10 +220,7 @@ export function generateFallbackProgram(missingInstructions: string[], iteration
   return lines.join('\n');
 }
 
-/**
- * For iteration 1 (no missing list yet), generate a broad program covering
- * many instruction families.
- */
+
 export function generateBroadProgram(): string {
   const families = [
     ['LUI', 'AUIPC', 'ADDI', 'SLTI', 'SLTIU', 'XORI', 'ORI', 'ANDI'],

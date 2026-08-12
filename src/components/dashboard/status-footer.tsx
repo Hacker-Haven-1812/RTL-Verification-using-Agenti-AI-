@@ -14,11 +14,11 @@ interface Props {
 
 export function StatusFooter({ state, onReset }: Props) {
   const [elapsed, setElapsed] = useState(0);
-  // Track which sessionIds have had their summary dismissed by the user.
-  // When a new session completes, its summary shows automatically.
+
+
   const [dismissedSessions, setDismissedSessions] = useState<Set<string>>(new Set());
 
-  // Track elapsed time while running
+
   useEffect(() => {
     if (state.status !== 'running') return;
     const startTime = state.sessionStartTime ?? Date.now();
@@ -26,7 +26,7 @@ export function StatusFooter({ state, onReset }: Props) {
     return () => clearInterval(t);
   }, [state.status, state.sessionStartTime]);
 
-  // Auto-show summary when a session completes, unless the user dismissed it.
+
   const showSummary = state.status === 'completed'
     && state.sessionId !== null
     && !dismissedSessions.has(state.sessionId);
@@ -47,7 +47,7 @@ export function StatusFooter({ state, onReset }: Props) {
     }
   };
 
-  // Aggregate formal results for the summary
+
   const formalSummary = (() => {
     let proof = 0, cex = 0, err = 0;
     for (const m of Object.values(state.formalResults)) {
@@ -63,12 +63,12 @@ export function StatusFooter({ state, onReset }: Props) {
   const isError = state.status === 'error';
   const isIdle = state.status === 'idle';
 
-  // Progress: current iteration / total iterations
+
   const progress = state.totalIterations > 0
     ? Math.min(100, (state.currentIteration / state.totalIterations) * 100)
     : 0;
 
-  // Determine current phase description
+
   const phaseDesc = (() => {
     if (isIdle) return 'Idle — configure and start a verification run, or write your own program/property below.';
     if (isError) return 'Session ended with errors — check the error panel above.';
@@ -80,12 +80,12 @@ export function StatusFooter({ state, onReset }: Props) {
 
   return (
     <>
-      {/* Sticky bottom status bar */}
+      {}
       <div className="sticky bottom-0 z-30 mt-3">
         <Card className={`border-t-2 ${isRunning ? 'border-t-primary' : isCompleted ? 'border-t-primary' : isError ? 'border-t-destructive' : 'border-t-border'} bg-card/95 backdrop-blur-sm shadow-lg`}>
           <CardContent className="px-3 py-2.5">
             <div className="flex items-center justify-between gap-3 flex-wrap">
-              {/* Status + phase */}
+              {}
               <div className="flex items-center gap-3 min-w-0 flex-1">
                 <StatusIcon status={state.status} />
                 <div className="min-w-0">
@@ -110,7 +110,7 @@ export function StatusFooter({ state, onReset }: Props) {
                 </div>
               </div>
 
-              {/* Live metrics */}
+              {}
               <div className="flex items-center gap-3 flex-wrap">
                 <Metric
                   icon={Target}
@@ -156,7 +156,7 @@ export function StatusFooter({ state, onReset }: Props) {
               </div>
             </div>
 
-            {/* Progress bar */}
+            {}
             {isRunning && state.totalIterations > 0 && (
               <div className="mt-2 h-0.5 rounded-full bg-muted overflow-hidden">
                 <div className="h-full bg-primary transition-all duration-500" style={{ width: `${progress}%` }} />
@@ -166,7 +166,7 @@ export function StatusFooter({ state, onReset }: Props) {
         </Card>
       </div>
 
-      {/* Session Summary modal */}
+      {}
       {showSummary && isCompleted && (
         <SummaryModal state={state} formalSummary={formalSummary} elapsed={elapsed} onClose={dismissSummary} onReset={onReset} />
       )}
@@ -229,7 +229,7 @@ function SummaryModal({ state, formalSummary, elapsed, onClose, onReset }: {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
       <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto border-primary/30" onClick={(e) => e.stopPropagation()}>
         <CardContent className="p-6">
-          {/* Header */}
+          {}
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <CheckCircle2 className="h-8 w-8 text-primary" />
@@ -241,7 +241,7 @@ function SummaryModal({ state, formalSummary, elapsed, onClose, onReset }: {
             <Button size="sm" variant="ghost" onClick={onClose}>✕</Button>
           </div>
 
-          {/* Outcome banner */}
+          {}
           <div className={`rounded-md border p-3 mb-4 ${
             state.simLoopEndReason === 'goal-met'
               ? 'border-primary/40 bg-primary/5'
@@ -266,7 +266,7 @@ function SummaryModal({ state, formalSummary, elapsed, onClose, onReset }: {
             </div>
           </div>
 
-          {/* Big metric cards */}
+          {}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
             <SummaryMetric label="Overall Coverage" value={r ? `${(r.overallCoverage * 100).toFixed(1)}%` : '—'} accent="emerald" />
             <SummaryMetric label="Iterations Run" value={`${state.currentIteration} / ${state.totalIterations}`} accent="cyan" />
@@ -274,7 +274,7 @@ function SummaryModal({ state, formalSummary, elapsed, onClose, onReset }: {
             <SummaryMetric label="Counterexamples" value={String(formalSummary.cex)} accent="rose" />
           </div>
 
-          {/* Coverage breakdown */}
+          {}
           {r && (
             <div className="mb-4">
               <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Coverage Breakdown</h3>
@@ -289,7 +289,7 @@ function SummaryModal({ state, formalSummary, elapsed, onClose, onReset }: {
             </div>
           )}
 
-          {/* Functional scenarios list */}
+          {}
           {r && (
             <div className="mb-4">
               <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Functional Scenarios</h3>
@@ -304,7 +304,7 @@ function SummaryModal({ state, formalSummary, elapsed, onClose, onReset }: {
             </div>
           )}
 
-          {/* Formal verification summary */}
+          {}
           {Object.keys(state.formalResults).length > 0 && (
             <div className="mb-4">
               <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Formal Verification</h3>
@@ -333,7 +333,7 @@ function SummaryModal({ state, formalSummary, elapsed, onClose, onReset }: {
             </div>
           )}
 
-          {/* Coverage Analysis */}
+          {}
           {state.latestAnalysis && (
             <div className="mb-4">
               <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Coverage Analysis</h3>
@@ -353,7 +353,7 @@ function SummaryModal({ state, formalSummary, elapsed, onClose, onReset }: {
             </div>
           )}
 
-          {/* Footer */}
+          {}
           <div className="flex items-center justify-between pt-3 border-t border-border/40">
             <div className="text-[10px] text-muted-foreground">
               Total duration: <span className="font-mono">{formatDuration(totalDuration)}</span>
